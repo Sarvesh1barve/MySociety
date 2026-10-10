@@ -1,0 +1,327 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">
+      {{ session.user()?.superAdmin ? 'PLATFORM & COMMUNITY' : 'YOUR COMMUNITY' }}
+    </p>
+    <h1>{{ title | t }}</h1>
+    <p class="subtitle">{{ description | t }}</p>
+  </div>
+</section>
+@if (error()) {
+  <div class="alert error" role="alert">{{ error() }}</div>
+}
+@if (success()) {
+  <div class="alert success" role="status">{{ success() }}</div>
+}
+@if (loading()) {
+  <div class="loading-state"><span class="spinner"></span>Loading…</div>
+}
+@if (key === 'branding' || key === 'settings') {
+  <section class="panel settings-panel">
+    <h2>{{ key === 'branding' ? 'Your platform identity' : 'Society details' }}</h2>
+    <p class="muted">
+      {{
+        key === 'branding'
+          ? 'Your application name is independent of each society’s name.'
+          : 'These settings apply only to the active society.'
+      }}
+    </p>
+    <app-record-form
+      [fields]="fields"
+      [values]="values"
+      [busy]="busy()"
+      (submitted)="save($event)"
+      (cancelled)="load()"
+    />
+    <p class="ownership-note">All rights reserved by Sarvesh Barve</p>
+  </section>
+}
+@if (key === 'profile') {
+  <div class="profile-grid">
+    <section class="panel settings-panel">
+      <div class="profile-card-heading">
+        <div class="avatar large">{{ session.user()?.name?.slice(0, 1) }}</div>
+        <div>
+          <h2>{{ session.user()?.name }}</h2>
+          <p>{{ session.user()?.email || session.user()?.mobile }}</p>
+        </div>
+      </div>
+      <dl class="detail-grid">
+        <div>
+          <dt>Mobile</dt>
+          <dd>{{ session.user()?.mobile || 'Not provided' }}</dd>
+        </div>
+        <div>
+          <dt>Current society</dt>
+          <dd>{{ session.context()?.society?.name || 'Platform' }}</dd>
+        </div>
+        <div>
+          <dt>Associated flats</dt>
+          <dd>{{ profileFlats().join(', ') || 'No flat links' }}</dd>
+        </div>
+        <div>
+          <dt>Current roles</dt>
+          <dd>{{ session.context()?.roles?.join(', ')?.replaceAll('_', ' ') || 'SUPER ADMIN' }}</dd>
+        </div>
+      </dl>
+      <app-record-form
+        [fields]="fields"
+        [values]="values"
+        [busy]="busy()"
+        (submitted)="save($event)"
+        (cancelled)="load()"
+      /><a routerLink="/select-society" class="button secondary"
+        ><app-icon name="building" />Switch society</a
+      >
+    </section>
+    <section class="panel settings-panel">
+      <h2>Change password</h2>
+      <p class="muted">Use at least 12 characters. Keep your password private.</p>
+      <app-record-form
+        [fields]="passwordFields"
+        [busy]="busy()"
+        submitLabel="Change password"
+        (submitted)="changePassword($event)"
+      />
+    </section>
+  </div>
+}
+@if (key === 'diagnostics') {
+  <section class="panel settings-panel">
+    <div class="section-heading">
+      <h2>Connection & system health</h2>
+      <span
+        class="badge"
+        [class.green]="session.status() === 'Online'"
+        [class.red]="session.status() !== 'Online'"
+        >{{ session.status() }}</span
+      >
+    </div>
+    <dl class="diagnostic-grid">
+      <div>
+        <dt>Frontend version</dt>
+        <dd>1.0.0</dd>
+      </div>
+      <div>
+        <dt>Configured API URL</dt>
+        <dd>{{ config.apiBaseUrl || 'Not configured' }}</dd>
+      </div>
+      <div>
+        <dt>Browser connectivity</dt>
+        <dd>{{ session.online() ? 'Online' : 'Offline' }}</dd>
+      </div>
+      <div>
+        <dt>Backend reachable</dt>
+        <dd>{{ session.reachable() ? 'Yes' : 'No' }}</dd>
+      </div>
+      <div>
+        <dt>Backend version</dt>
+        <dd>{{ diagnostics().version || 'Unknown' }}</dd>
+      </div>
+      <div>
+        <dt>Backend port</dt>
+        <dd>{{ diagnostics().port || 'Unknown' }}</dd>
+      </div>
+      <div>
+        <dt>Database</dt>
+        <dd>{{ diagnostics().database || 'Unknown' }}</dd>
+      </div>
+      <div>
+        <dt>Current user</dt>
+        <dd>{{ session.user()?.name }}</dd>
+      </div>
+      <div>
+        <dt>Active society</dt>
+        <dd>{{ session.context()?.society?.name || 'Platform' }}</dd>
+      </div>
+      <div>
+        <dt>Memberships</dt>
+        <dd>{{ session.memberships().length }}</dd>
+      </div>
+    </dl>
+    <div class="form-actions">
+      <button class="button secondary" (click)="refreshConfig()" [disabled]="loading()">
+        Refresh configuration</button
+      ><button class="button primary" (click)="load()" [disabled]="loading()">
+        Test backend connection
+      </button>
+    </div>
+  </section>
+}
+@if (key === 'roles') {
+  <section class="panel resource-panel">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Society role</th>
+            <th>Permissions</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr>
+              <td>
+                <strong>{{ pretty(row['code']) }}</strong>
+              </td>
+              <td>{{ row['permissions'].split(',').length }} permissions</td>
+              <td>
+                <button class="small-button" (click)="chooseRole(row)">Manage permissions</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="panel-footnote">
+      Society role definitions apply across the platform. SUPER_ADMIN is a separate platform role.
+    </p>
+  </section>
+  @if (role) {
+    <div class="modal-backdrop">
+      <section class="modal" role="dialog" aria-modal="true" aria-label="Edit role permissions">
+        <div class="modal-heading">
+          <h2>{{ pretty(role['code']) }}</h2>
+          <button class="icon-button" aria-label="Close" (click)="role = null">
+            <app-icon name="close" />
+          </button>
+        </div>
+        <div class="permission-grid">
+          @for (permission of permissions; track permission) {
+            <label class="checkbox-field"
+              ><input
+                type="checkbox"
+                [checked]="selectedPermissions.has(permission)"
+                (change)="permissionChanged(permission, $event)"
+              /><span>{{ pretty(permission) }}</span></label
+            >
+          }
+        </div>
+        <div class="form-actions">
+          <button
+            class="button primary"
+            [disabled]="busy() || !selectedPermissions.size"
+            (click)="saveRole()"
+          >
+            Save permissions
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+}
+@if (key === 'notifications') {
+  <section class="panel notification-list">
+    @for (row of rows(); track row.id) {
+      <article class="notification-item" [class.unread]="!row['readAt']">
+        <span class="notification-icon"><app-icon name="bell" /></span>
+        <div>
+          <strong>{{ row['title'] }}</strong>
+          <p>{{ row['message'] }}</p>
+          <small>{{ row['createdAt'] }}</small>
+        </div>
+        <a [routerLink]="notificationRoute(row)" class="small-button" (click)="read(row)">Open</a>
+        @if (!row['readAt']) {
+          <button class="small-button" (click)="read(row)">Mark read</button>
+        }
+      </article>
+    } @empty {
+      <div class="empty-state">
+        <app-icon name="bell" />
+        <h3>You’re all caught up</h3>
+        <p>New updates will appear here.</p>
+      </div>
+    }
+  </section>
+}
+@if (key === 'search') {
+  <section class="panel settings-panel">
+    <form class="global-search-form" (ngSubmit)="search()">
+      <div class="search-input">
+        <app-icon name="search" /><input
+          name="query"
+          [(ngModel)]="query"
+          placeholder="Search your society…"
+          minlength="2"
+          maxlength="100"
+        />
+      </div>
+      <button class="button primary" [disabled]="loading() || query.trim().length < 2">
+        Search
+      </button>
+    </form>
+    <p class="muted">
+      Results include only records you have permission to see in the active society.
+    </p>
+    <div class="search-results">
+      @for (row of rows(); track row.id) {
+        <a [routerLink]="'/' + row['module']"
+          ><app-icon name="search" /><span
+            ><strong>{{ row['title'] }}</strong
+            ><small>{{ row['module'] }}</small></span
+          ><app-icon name="arrow"
+        /></a>
+      } @empty {
+        <p class="empty-inline">
+          Search for a resident, flat, visitor, parcel, complaint or meeting.
+        </p>
+      }
+    </div>
+  </section>
+}
+@if (key === 'reports') {
+  <section class="panel resource-panel">
+    <div class="table-toolbar">
+      <label class="inline-label"
+        >Report<select [(ngModel)]="report" (ngModelChange)="load()">
+          @for (option of availableReports; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select></label
+      ><button class="button secondary" (click)="export()" [disabled]="busy() || !rows().length">
+        <app-icon name="download" />Export CSV
+      </button>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            @for (column of reportColumns(); track column) {
+              <th>{{ pretty(column) }}</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr>
+              @for (column of reportColumns(); track column) {
+                <td>{{ pretty(row[column]) }}</td>
+              }
+            </tr>
+          } @empty {
+            <tr>
+              <td>No records match this report.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}
+@if (
+  key === 'forbidden' ||
+  key === 'not-found' ||
+  key === 'offline' ||
+  key === 'server-unavailable' ||
+  key === 'unexpected-error'
+) {
+  <section class="panel empty-state error-page">
+    <div class="empty-icon"><app-icon name="shield" /></div>
+    <h2>{{ title }}</h2>
+    <p>{{ description }}</p>
+    <a [routerLink]="session.context() ? '/dashboard' : '/platform'" class="button primary"
+      >Back to home</a
+    >
+  </section>
+}

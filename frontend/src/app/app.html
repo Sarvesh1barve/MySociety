@@ -1,0 +1,168 @@
+@if (loginPage()) {
+  <router-outlet />
+} @else {
+  <div class="app-layout">
+    @if (menuOpen()) {
+      <button
+        class="sidebar-scrim"
+        aria-label="Close navigation"
+        (click)="menuOpen.set(false)"
+      ></button>
+    }
+    <aside class="sidebar" [class.mobile-open]="menuOpen()">
+      <a class="brand" [routerLink]="session.context() ? '/dashboard' : '/platform'"
+        ><span class="brand-mark">
+          @if (config.brand().logoUrl) {
+            <img [src]="config.brand().logoUrl" alt="" />
+          } @else {
+            <app-icon name="building" />
+          }</span
+        ><span>{{ config.brand().applicationName }}<small>Life, a little closer.</small></span></a
+      >
+      <a class="society-switcher" routerLink="/select-society"
+        ><span class="society-icon"><app-icon name="building" /></span
+        ><span
+          ><small>{{ 'YOUR SOCIETY' | t }}</small
+          ><strong>{{ session.context()?.society?.name || 'Choose a community' }}</strong></span
+        ><app-icon name="chevron"
+      /></a>
+      <div class="sidebar-scroll">
+        @if (session.context()) {
+          <p class="nav-caption">{{ 'COMMUNITY' | t }}</p>
+          <nav aria-label="Society navigation">
+            @for (item of communityNav; track item.path) {
+              @if (session.can(item.permission)) {
+                <a [routerLink]="item.path" routerLinkActive="active"
+                  ><app-icon [name]="item.icon" /><span>{{ item.label | t }}</span>
+                  @if (item.path === '/dashboard') {
+                    <span class="nav-active-dot"></span>
+                  }
+                </a>
+              }
+            }
+          </nav>
+        }
+        @if (session.user()?.superAdmin) {
+          <p class="nav-caption">{{ 'PLATFORM' | t }}</p>
+          <nav aria-label="Platform navigation">
+            @for (item of platformNav; track item.path) {
+              @if (item.path === '/platform') {
+                <a routerLink="/platform" routerLinkActive="active" (click)="session.clearContext()"
+                  ><app-icon [name]="item.icon" /><span>{{ item.label | t }}</span></a
+                >
+              } @else {
+                <a [routerLink]="item.path" routerLinkActive="active"
+                  ><app-icon [name]="item.icon" /><span>{{ item.label | t }}</span></a
+                >
+              }
+            }
+          </nav>
+        }
+        @if (session.context() && session.can('SOCIETY_UPDATE')) {
+          <p class="nav-caption">{{ 'MANAGE' | t }}</p>
+          <nav>
+            <a routerLink="/settings" routerLinkActive="active"
+              ><app-icon name="settings" />{{ 'Society settings' | t }}</a
+            >
+            @if (session.can('AUDIT_READ')) {
+              <a routerLink="/audit" routerLinkActive="active"
+                ><app-icon name="shield" />{{ 'Society audit' | t }}</a
+              >
+            }
+          </nav>
+        }
+      </div>
+      <div class="sidebar-bottom">
+        <div class="community-mini">
+          <span class="mini-home"><app-icon name="home" /></span>
+          <div>
+            <strong>{{ 'Better, together.' | t }}</strong
+            ><small>{{ 'A community you call home.' | t }}</small>
+          </div>
+        </div>
+        <a class="sidebar-profile" routerLink="/profile"
+          ><span class="avatar">{{ initials() }}</span
+          ><span
+            ><strong>{{ session.user()?.name || 'Welcome' }}</strong
+            ><small>{{
+              session.context()?.roles?.[0]?.replaceAll('_', ' ') ||
+                (session.user()?.superAdmin ? 'Platform owner' : 'Your account')
+            }}</small></span
+          ><app-icon name="settings"
+        /></a>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button
+            class="icon-button mobile-menu"
+            aria-label="Open navigation"
+            (click)="menuOpen.set(true)"
+          >
+            <app-icon name="menu" /></button
+          ><app-icon name="home" /><span>{{
+            session.context()?.society?.name || config.brand().applicationName
+          }}</span
+          ><span class="topbar-divider"></span
+          ><span class="muted topbar-label">{{ 'Community workspace' | t }}</span>
+        </div>
+        <div class="topbar-actions">
+          <span class="connection"
+            ><span class="status-dot" [class.offline]="session.status() !== 'Online'"></span
+            >{{ session.status() | t }}</span
+          ><select
+            aria-label="Language"
+            [ngModel]="i18n.language()"
+            (ngModelChange)="i18n.load($event)"
+          >
+            <option value="en">EN</option>
+            <option value="mr">मराठी</option>
+            <option value="hi">हिन्दी</option>
+          </select>
+          @if (session.context()) {
+            <a class="icon-button" routerLink="/search" aria-label="Search society"
+              ><app-icon name="search" /></a
+            ><a
+              class="icon-button notification-button"
+              routerLink="/notifications"
+              aria-label="Notifications"
+              ><app-icon name="bell" />
+              @if (unread()) {
+                <span class="notification-count">{{ unread() > 9 ? '9+' : unread() }}</span>
+              }
+            </a>
+          }
+          <button
+            class="icon-button logout-button"
+            aria-label="Sign out"
+            title="Sign out"
+            (click)="logout()"
+          >
+            <app-icon name="logout" /></button
+          ><a class="avatar topbar-avatar" routerLink="/profile" aria-label="Your profile">{{
+            initials()
+          }}</a>
+        </div>
+      </header>
+      @if (session.status() !== 'Online') {
+        <div class="connectivity-banner" role="status">
+          <app-icon name="shield" />{{
+            (session.online()
+              ? 'Unable to connect to the Society server.'
+              : 'You are offline. Reconnect to load current society records.'
+            ) | t
+          }}
+        </div>
+      }
+      <main id="main-content"><router-outlet /></main>
+      <footer class="app-footer">
+        <span
+          >{{ session.context()?.society?.name || 'Your community, connected.' }}
+          <span class="footer-separator">·</span> Powered by
+          {{ config.brand().applicationName }}</span
+        ><span>All rights reserved by Sarvesh Barve</span>
+      </footer>
+    </div>
+  </div>
+}

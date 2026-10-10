@@ -1,0 +1,237 @@
+<section class="page-heading dashboard-heading">
+  <div>
+    <p class="eyebrow">
+      {{ isPlatform ? ('PLATFORM OVERVIEW' | t) : ('A LITTLE CLOSER, EVERY DAY' | t) }}
+    </p>
+    <h1>{{ 'Dashboard' | t }}</h1>
+    <p class="subtitle">
+      {{
+        isPlatform
+          ? ('Your communities, connected in one place.' | t)
+          : ('Everything happening in your community, at a glance.' | t)
+      }}
+    </p>
+  </div>
+  <div class="today"><app-icon name="calendar" />{{ date }}</div>
+</section>
+@if (error()) {
+  <div class="alert error" role="alert">
+    {{ error() }}<button class="text-button" (click)="load()">Try again</button>
+  </div>
+}
+<section class="welcome-banner">
+  <div>
+    <span class="welcome-pill"
+      ><span class="tiny-dot"></span
+      >{{ isPlatform ? ('PLATFORM OWNER' | t) : session.context()?.society?.name || '' }}</span
+    >
+    <h2>{{ greeting | t }}, {{ firstName }} <span class="sun-symbol">☀</span></h2>
+    <p>
+      {{
+        isPlatform
+          ? ('Give every society a place to grow together.' | t)
+          : ('A happy community starts with a little connection.' | t)
+      }}<br />{{
+        isPlatform
+          ? ('Manage your platform, people, and possibilities.' | t)
+          : ('Here’s what’s happening around your home today.' | t)
+      }}
+    </p>
+    <a class="banner-link" [routerLink]="isPlatform ? '/societies' : '/notices'"
+      >{{ (isPlatform ? 'Explore your societies' : 'Visit the notice board') | t
+      }}<app-icon name="arrow"
+    /></a>
+  </div>
+  <div class="neighbourhood-art" aria-hidden="true">
+    <div class="art-sun"></div>
+    <div class="art-cloud cloud-one"></div>
+    <div class="art-cloud cloud-two"></div>
+    <div class="art-building building-one"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="art-building building-two">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <div class="art-building building-three"><i></i><i></i><i></i><i></i></div>
+    <div class="art-tree tree-one"></div>
+    <div class="art-tree tree-two"></div>
+    <div class="art-ground"></div>
+    <div class="art-path"></div>
+  </div>
+</section>
+@if (loading()) {
+  <div class="loading-state"><span class="spinner"></span>{{ 'Loading your community…' | t }}</div>
+}
+<div class="stat-grid">
+  @for (stat of stats; track stat.name; let idx = $index) {
+    <a class="stat-card" [routerLink]="stat.route"
+      ><div class="stat-top">
+        <span>{{ stat.name | t }}</span
+        ><span class="stat-icon" [class]="'tone-' + idx"><app-icon [name]="stat.icon" /></span>
+      </div>
+      <strong>{{ stat.value }}</strong>
+      <div class="stat-bottom">
+        <span>{{ isPlatform ? ('Platform overview' | t) : ('In your society' | t) }}</span
+        ><app-icon name="arrow" /></div
+    ></a>
+  }
+</div>
+<section class="quick-section">
+  <div class="section-heading">
+    <h2>{{ 'A few quick things' | t }}</h2>
+    <span class="muted">{{ 'Less tapping. More living.' | t }}</span>
+  </div>
+  <div class="quick-grid">
+    @for (action of quickActions; track action.route) {
+      <a class="quick-card" [routerLink]="action.route"
+        ><div class="quick-icon"><app-icon [name]="action.icon" /></div>
+        <div>
+          <strong>{{ action.label | t }}</strong
+          ><small>{{ action.sub | t }}</small>
+        </div>
+        <app-icon name="arrow"
+      /></a>
+    }
+  </div>
+</section>
+@if (!isPlatform) {
+  <div class="dashboard-grid">
+    @if (session.can('NOTICE_READ')) {
+      <section class="panel notice-panel">
+        <div class="section-heading">
+          <div class="heading-icon">
+            <app-icon name="notice" />
+            <h2>{{ 'On the notice board' | t }}</h2>
+          </div>
+          <a routerLink="/notices" class="text-link"
+            >{{ 'View all' | t }}<app-icon name="arrow"
+          /></a>
+        </div>
+        @for (notice of data().notices || []; track notice.id; let idx = $index) {
+          <a class="notice-preview" routerLink="/notices"
+            ><div class="notice-marker" [class.important]="notice.noticeType !== 'GENERAL'">
+              <app-icon [name]="notice.noticeType === 'GENERAL' ? 'people' : 'notice'" />
+            </div>
+            <div>
+              <div class="notice-topline">
+                <span class="label-tag" [class.amber-text]="notice.noticeType !== 'GENERAL'">{{
+                  pretty(notice.noticeType)
+                }}</span
+                ><small>{{ dateShort(notice.publishDate) }}</small>
+              </div>
+              <h3>{{ notice.title }}</h3>
+              <p>{{ notice.content }}</p>
+              <span class="read-more">{{ 'Read notice' | t }} ↗</span>
+            </div></a
+          >
+        } @empty {
+          <div class="empty-inline">
+            <app-icon name="notice" />
+            <p>{{ 'You’re all caught up. New notices will appear here.' | t }}</p>
+          </div>
+        }
+      </section>
+    }
+    <div class="dashboard-right">
+      @if (session.can('MEETING_READ')) {
+        <section class="panel meeting-panel">
+          <div class="section-heading">
+            <div class="heading-icon">
+              <app-icon name="calendar" />
+              <h2>{{ 'Coming together' | t }}</h2>
+            </div>
+            <a routerLink="/meetings" aria-label="All meetings"><app-icon name="arrow" /></a>
+          </div>
+          @for (meeting of data().meetings || []; track meeting.id) {
+            <a routerLink="/meetings" class="meeting-preview"
+              ><div class="calendar-date">
+                <strong>{{ dateShort(meeting.startsAt).split(' ')[0] }}</strong
+                ><span>{{ dateShort(meeting.startsAt).split(' ')[1] }}</span>
+              </div>
+              <div>
+                <span class="label-tag">{{ pretty(meeting.meetingType) }}</span>
+                <h3>{{ meeting.title }}</h3>
+                <small>{{ time(meeting.startsAt) }} · {{ meeting.venue }}</small>
+              </div></a
+            >
+          } @empty {
+            <div class="empty-inline">
+              <p>{{ 'No upcoming meetings. Enjoy a little breathing room.' | t }}</p>
+            </div>
+          }
+        </section>
+      }
+      <section class="community-note">
+        <div class="note-illustration"><app-icon name="home" /><span>♡</span></div>
+        <p class="eyebrow">{{ 'IT TAKES A COMMUNITY' | t }}</p>
+        <h2>{{ 'Good neighbours.' | t }}<br />{{ 'A great place to live.' | t }}</h2>
+        <p>
+          {{
+            'A small hello, a little help, a shared responsibility. It all makes a difference.' | t
+          }}
+        </p>
+        <a routerLink="/emergency-contacts"
+          >{{ 'Your community contacts' | t }}<app-icon name="arrow"
+        /></a>
+      </section>
+    </div>
+  </div>
+  @if (session.can('COMPLAINT_READ') && (data().complaints || []).length) {
+    <section class="panel lower-panel">
+      <div class="section-heading">
+        <div class="heading-icon">
+          <app-icon name="complaint" />
+          <h2>{{ 'Getting things sorted' | t }}</h2>
+        </div>
+        <a class="text-link" routerLink="/complaints"
+          >{{ 'View complaints' | t }}<app-icon name="arrow"
+        /></a>
+      </div>
+      @for (complaint of data().complaints; track complaint.id) {
+        <a class="compact-record" routerLink="/complaints"
+          ><span class="record-dot"></span>
+          <div>
+            <strong>{{ complaint.title }}</strong
+            ><small>{{ complaint.location || pretty(complaint.category) }}</small>
+          </div>
+          <span class="badge amber">{{ pretty(complaint.status) }}</span
+          ><app-icon name="chevron"
+        /></a>
+      }
+    </section>
+  }
+  @if (session.can('VISITOR_CHECKIN')) {
+    <section class="panel lower-panel">
+      <div class="section-heading">
+        <h2>{{ 'At the gate' | t }}</h2>
+        <a routerLink="/visitors" class="text-link">Manage visitors <app-icon name="arrow" /></a>
+      </div>
+      @for (visitor of data().visitors || []; track visitor.id) {
+        <a class="compact-record" routerLink="/visitors"
+          ><app-icon name="visitor" />
+          <div>
+            <strong>{{ visitor.visitorName }}</strong
+            ><small>{{ pretty(visitor.visitorType) }}</small>
+          </div>
+          <span class="badge amber">{{ pretty(visitor.status) }}</span></a
+        >
+      } @empty {
+        <p class="muted">No gate activity yet.</p>
+      }
+    </section>
+  }
+} @else {
+  <section class="panel platform-note">
+    <div class="section-heading">
+      <h2>{{ config.brand().applicationName }} · {{ 'Platform overview' | t }}</h2>
+      <span class="badge green">{{
+        data().database === 'UP' ? 'All systems connected' : 'Checking connection'
+      }}</span>
+    </div>
+    <p>
+      Societies share one application and database. Each society’s memberships, roles, homes and
+      daily activity stay scoped to that community.
+    </p>
+    <a class="button secondary" routerLink="/system-audit"
+      ><app-icon name="shield" />Review system audit</a
+    >
+  </section>
+}

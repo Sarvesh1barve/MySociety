@@ -1,0 +1,13 @@
+* text=auto
+*.java text eol=lf
+*.ts text eol=lf
+*.html text eol=lf
+*.scss text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.sql text eol=lf
+*.md text eol=lf
+mvnw text eol=lf
+*.cmd text eol=crlf
+*.png binary
+*.ico binary

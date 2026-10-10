@@ -1,0 +1,517 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">{{ def.platform ? ('PLATFORM MANAGEMENT' | t) : ('YOUR COMMUNITY' | t) }}</p>
+    <h1>{{ def.title | t }}</h1>
+    <p class="subtitle">{{ def.description | t }}</p>
+  </div>
+  @if (canCreate) {
+    <button class="button primary" (click)="create()">
+      <app-icon name="plus" />{{ 'Add ' + def.singular | t }}
+    </button>
+  }
+</section>
+@if (isStructure) {
+  <nav class="tabs">
+    <a routerLink="/flats" [class.active]="key === 'flats'">{{ 'Flats' | t }}</a
+    ><a routerLink="/buildings" [class.active]="key === 'buildings'">{{ 'Buildings' | t }}</a
+    ><a routerLink="/wings" [class.active]="key === 'wings'">{{ 'Wings' | t }}</a
+    ><a routerLink="/floors" [class.active]="key === 'floors'">{{ 'Floors' | t }}</a>
+  </nav>
+}
+@if (isPeople) {
+  <nav class="tabs">
+    <a routerLink="/residents" [class.active]="key === 'residents'">{{ 'Residents' | t }}</a
+    ><a routerLink="/mappings" [class.active]="key === 'mappings'">{{ 'Flat links' | t }}</a>
+    @if (session.can('RESIDENT_READ_ALL')) {
+      <a routerLink="/society-users" [class.active]="key === 'society-users'">{{
+        'Users & memberships' | t
+      }}</a>
+    }
+  </nav>
+}
+@if (error()) {
+  <div class="alert error" role="alert">
+    {{ error() }} <button class="text-button" (click)="load()">{{ 'Try again' | t }}</button>
+  </div>
+}
+@if (success()) {
+  <div class="alert success" role="status">
+    {{ success()
+    }}<button class="icon-button" aria-label="Dismiss" (click)="success.set('')">
+      <app-icon name="close" />
+    </button>
+  </div>
+}
+<section class="panel resource-panel">
+  <div class="table-toolbar">
+    <div class="search-input">
+      <app-icon name="search" /><input
+        aria-label="Search records"
+        [placeholder]="'Search ' + def.title.toLowerCase() + '…'"
+        [(ngModel)]="search"
+        (ngModelChange)="page = 1"
+      />
+    </div>
+    <div class="toolbar-right">
+      @if (statuses.length) {
+        <select aria-label="Filter status" [(ngModel)]="filter" (ngModelChange)="page = 1">
+          <option value="">{{ 'All statuses' | t }}</option>
+          @for (status of statuses; track status) {
+            <option [value]="status">{{ pretty(status) | t }}</option>
+          }
+        </select>
+      }
+      <span class="count">{{ filtered.length }} {{ 'records' | t }}</span
+      ><button class="icon-button" (click)="load()" aria-label="Refresh records">
+        <app-icon name="sun" />
+      </button>
+    </div>
+  </div>
+  @if (loading()) {
+    <div class="loading-state">
+      <span class="spinner"></span>{{ 'Loading your community…' | t }}
+    </div>
+  } @else if (!filtered.length) {
+    <div class="empty-state">
+      <div class="empty-icon"><app-icon [name]="def.icon" /></div>
+      <h3>{{ 'Nothing here yet' | t }}</h3>
+      <p>
+        {{
+          search || filter
+            ? ('Try a different search or filter.' | t)
+            : ('New records will appear here as your community gets started.' | t)
+        }}
+      </p>
+      @if (canCreate) {
+        <button class="button secondary" (click)="create()">{{ 'Add ' + def.singular | t }}</button>
+      }
+    </div>
+  } @else {
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            @for (column of def.columns; track column.key) {
+              <th>{{ column.label | t }}</th>
+            }
+            <th class="align-right">{{ 'Actions' | t }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of visibleRows; track row.id) {
+            <tr>
+              @for (column of def.columns; track column.key; let first = $first) {
+                <td [class.primary-cell]="first">
+                  @if (first) {
+                    <button class="record-link" (click)="open(row)">
+                      {{ cell(row, column.key) }}
+                    </button>
+                  } @else if (badge(column.key)) {
+                    <span class="badge" [class]="badgeClass(row[column.key])">{{
+                      cell(row, column.key) | t
+                    }}</span>
+                  } @else {
+                    {{ cell(row, column.key) }}
+                  }
+                </td>
+              }
+              <td>
+                <div class="row-actions">
+                  @for (action of actions(row); track action.key) {
+                    <button
+                      class="small-button"
+                      [class.danger-text]="action.key === 'deny'"
+                      [disabled]="busy()"
+                      (click)="act(row, action.key)"
+                    >
+                      {{ action.label | t }}
+                    </button>
+                  }
+                  @if (canEdit(row)) {
+                    <button class="small-button" (click)="edit(row)">{{ 'Edit' | t }}</button>
+                  }
+                  @if (key === 'complaints' || key === 'meetings') {
+                    <button class="small-button" (click)="open(row)">
+                      {{ 'View details' | t }}
+                    </button>
+                  }
+                  @if (key === 'tasks' && session.can('TASK_UPDATE')) {
+                    <button class="small-button" (click)="taskStatus(row)">
+                      {{ 'Update' | t }}
+                    </button>
+                  }
+                  @if (key === 'society-users' && session.can('MEMBERSHIP_MANAGE')) {
+                    <button class="small-button" (click)="membership(row)">
+                      {{ 'Access' | t }}
+                    </button>
+                  }
+                  @if (key === 'platform-users') {
+                    <button class="small-button" (click)="linkUser(row)">
+                      {{ 'Add membership' | t }}
+                    </button>
+                    @if (!row['superAdmin']) {
+                      <button class="small-button" [disabled]="busy()" (click)="toggleUser(row)">
+                        {{ row['status'] === 'ACTIVE' ? 'Suspend' : 'Activate' }}
+                      </button>
+                    }
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span
+        >{{ 'Showing' | t }} {{ (page - 1) * pageSize + 1 }}–{{
+          page * pageSize > filtered.length ? filtered.length : page * pageSize
+        }}
+        {{ 'of' | t }} {{ filtered.length }}</span
+      >
+      <div>
+        <button class="small-button" (click)="page = page - 1" [disabled]="page === 1">
+          {{ 'Previous' | t }}</button
+        ><span>{{ page }} / {{ pageCount }}</span
+        ><button class="small-button" (click)="page = page + 1" [disabled]="page >= pageCount">
+          {{ 'Next' | t }}
+        </button>
+      </div>
+    </div>
+  }
+</section>
+@if (modal()) {
+  <div class="modal-backdrop" (click)="closeModal()">
+    <section
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="formTitle"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">{{ def.title | t }}</p>
+          <h2>{{ formTitle | t }}</h2>
+        </div>
+        <button class="icon-button" aria-label="Close form" (click)="closeModal()">
+          <app-icon name="close" />
+        </button>
+      </div>
+      @if (key === 'documents') {
+        <form (ngSubmit)="upload()" class="record-form">
+          <label class="upload-zone"
+            ><app-icon name="file" /><strong>{{ 'Choose a document' | t }}</strong
+            ><span>PDF, PNG or JPEG · up to 10 MB</span
+            ><input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg"
+              (change)="fileSelected($event)"
+              required /></label
+          ><label
+            >{{ 'Visibility' | t
+            }}<select name="visibility" [(ngModel)]="fileVisibility">
+              <option value="SOCIETY">Society members</option>
+              @if (session.can('DOCUMENT_COMMITTEE')) {
+                <option value="COMMITTEE">Committee only</option>
+              }
+              <option value="PRIVATE">Only me</option>
+            </select></label
+          ><label
+            >{{ 'Replaces a previous version (optional)' | t
+            }}<select name="previousVersion" [(ngModel)]="previousVersionId">
+              <option value="">New document</option>
+              @for (doc of rows(); track doc.id) {
+                <option [value]="doc.id">{{ doc['fileName'] }} · v{{ doc['revision'] }}</option>
+              }
+            </select></label
+          >
+          @if (formError()) {
+            <p class="alert error">{{ formError() }}</p>
+          }
+          <div class="form-actions">
+            <button type="button" class="button secondary" (click)="closeModal()">Cancel</button
+            ><button class="button primary" [disabled]="!file || busy()">
+              {{ busy() ? 'Uploading…' : 'Upload document' }}
+            </button>
+          </div>
+        </form>
+      } @else {
+        <app-record-form
+          [fields]="formFields"
+          [values]="formValues"
+          [lookups]="lookups"
+          [busy]="busy()"
+          [error]="formError()"
+          (submitted)="selected() ? saveLink($event) : save($event)"
+          (cancelled)="closeModal()"
+        />
+      }
+    </section>
+  </div>
+}
+@if (detail(); as row) {
+  <div class="modal-backdrop detail-backdrop" (click)="detail.set(null)">
+    <section
+      class="modal detail-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Record details"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="modal-heading">
+        <div>
+          <p class="eyebrow">{{ def.singular | t }}</p>
+          <h2>{{ cell(row, def.columns[0].key) }}</h2>
+        </div>
+        <button class="icon-button no-print" aria-label="Close details" (click)="detail.set(null)">
+          <app-icon name="close" />
+        </button>
+      </div>
+      @if (key === 'meetings') {
+        <p class="meeting-meta">
+          {{ formatDate(row['startsAt']) }} · {{ row['venue'] }}
+          <span class="badge green">{{ pretty(row['momStatus']) }}</span>
+        </p>
+        <div class="detail-section">
+          <div class="section-heading">
+            <h3>{{ 'Agenda & decisions' | t }}</h3>
+            <button class="small-button no-print" (click)="print()">
+              <app-icon name="download" />Print / Save PDF
+            </button>
+          </div>
+          @for (item of agenda; track $index; let idx = $index) {
+            <div class="agenda-item">
+              <span class="agenda-number">{{ idx + 1 }}</span>
+              <div class="agenda-content">
+                @if (session.can('MOM_CREATE') && row['momStatus'] !== 'APPROVED') {
+                  <label>Agenda title<input [(ngModel)]="item.title" maxlength="180" /></label
+                  ><label
+                    >Description<textarea [(ngModel)]="item.description" rows="2"></textarea></label
+                  ><label
+                    >Discussion<textarea [(ngModel)]="item.discussion" rows="2"></textarea></label
+                  ><label>Decision<textarea [(ngModel)]="item.decision" rows="2"></textarea></label>
+                  <div class="row-actions">
+                    <button
+                      class="small-button"
+                      (click)="moveAgenda(idx, -1)"
+                      [disabled]="idx === 0"
+                    >
+                      Move up</button
+                    ><button
+                      class="small-button"
+                      (click)="moveAgenda(idx, 1)"
+                      [disabled]="idx === agenda.length - 1"
+                    >
+                      Move down</button
+                    ><button class="small-button danger-text" (click)="agenda.splice(idx, 1)">
+                      Remove
+                    </button>
+                  </div>
+                } @else {
+                  <h4>{{ item.title }}</h4>
+                  <p>{{ item.description }}</p>
+                  <p><strong>Discussion:</strong> {{ item.discussion || '—' }}</p>
+                  <p><strong>Decision:</strong> {{ item.decision || '—' }}</p>
+                }
+              </div>
+            </div>
+          }
+          @if (!agenda.length) {
+            <p class="muted">No agenda items recorded yet.</p>
+          }
+          @if (session.can('MOM_CREATE') && row['momStatus'] !== 'APPROVED') {
+            <button class="button secondary no-print" (click)="addAgenda()">
+              <app-icon name="plus" />Add agenda item
+            </button>
+          }
+        </div>
+        <div class="detail-section">
+          <h3>{{ 'Attendance' | t }}</h3>
+          @for (person of attendance; track $index; let idx = $index) {
+            <div class="attendance-row">
+              @if (session.can('MOM_CREATE') && row['momStatus'] !== 'APPROVED') {
+                <select aria-label="Attendee" [(ngModel)]="person.userId">
+                  <option value="">Select attendee</option>
+                  @for (user of lookups['users'] || []; track user.value) {
+                    <option [value]="user.value">{{ user.label }}</option>
+                  }</select
+                ><select aria-label="Attendance status" [(ngModel)]="person.status">
+                  <option>PRESENT</option>
+                  <option>ABSENT</option>
+                  <option>LEAVE_OF_ABSENCE</option></select
+                ><button
+                  class="icon-button"
+                  aria-label="Remove attendee"
+                  (click)="attendance.splice(idx, 1)"
+                >
+                  <app-icon name="close" />
+                </button>
+              } @else {
+                <span>{{ cell({ id: '', assignedTo: person.userId }, 'assignedTo') }}</span
+                ><span class="badge">{{ pretty(person.status) }}</span>
+              }
+            </div>
+          }
+          @if (session.can('MOM_CREATE') && row['momStatus'] !== 'APPROVED') {
+            <button class="small-button no-print" (click)="addAttendance()">Add attendee</button>
+          }
+        </div>
+        <div class="detail-section">
+          <h3>{{ 'Resolutions' | t }}</h3>
+          @if (session.can('MOM_CREATE') && row['momStatus'] !== 'APPROVED') {
+            <textarea [(ngModel)]="resolutions" rows="4" maxlength="16000"></textarea
+            ><label
+              >Minutes status<select [(ngModel)]="momStatus">
+                <option value="DRAFT">Draft</option>
+                <option value="REVIEW">Ready for review</option>
+              </select></label
+            >
+          } @else {
+            <p class="preline">{{ resolutions || 'No resolutions recorded.' }}</p>
+          }
+        </div>
+        @if (formError()) {
+          <div class="alert error">{{ formError() }}</div>
+        }
+        <div class="form-actions no-print">
+          @if (session.can('MOM_CREATE') && row['momStatus'] !== 'APPROVED') {
+            <button class="button primary" [disabled]="busy()" (click)="saveMom()">
+              Save minutes
+            </button>
+          }
+          @if (session.can('MOM_APPROVE') && row['momStatus'] === 'REVIEW') {
+            <button class="button primary" [disabled]="busy()" (click)="approveMom()">
+              Approve & lock minutes
+            </button>
+          }
+          @if (row['momStatus'] === 'APPROVED') {
+            <p class="lock-note">
+              <app-icon name="shield" />Approved on {{ formatDate(row['approvedAt']) }}. These
+              minutes are locked.
+            </p>
+          }
+        </div>
+      } @else if (key === 'complaints') {
+        <p class="preline">{{ row['description'] }}</p>
+        <div class="detail-tags">
+          <span class="badge" [class]="badgeClass(row['status'])">{{ pretty(row['status']) }}</span
+          ><span class="badge" [class]="badgeClass(row['priority'])">{{
+            pretty(row['priority'])
+          }}</span
+          ><span>{{ row['location'] }}</span>
+        </div>
+        <h3>Activity timeline</h3>
+        <div class="timeline">
+          @for (event of history(); track event.id) {
+            <div class="timeline-item">
+              <span class="timeline-dot"></span><strong>{{ pretty(event['status']) }}</strong
+              ><small>{{ formatDate(event['createdAt']) }}</small>
+              <p>{{ event['comment'] }}</p>
+            </div>
+          }
+        </div>
+        <label
+          >Comment<textarea
+            [(ngModel)]="comment"
+            rows="3"
+            maxlength="4000"
+            placeholder="Add an update…"
+          ></textarea>
+        </label>
+        @if (session.can('COMPLAINT_UPDATE')) {
+          <div class="form-grid">
+            <label
+              >Status<select [(ngModel)]="complaintStatus">
+                @for (status of complaintStatuses; track status) {
+                  <option [value]="status">{{ pretty(status) }}</option>
+                }
+              </select></label
+            ><label
+              >Assigned to<select [(ngModel)]="assignee">
+                <option value="">Unassigned</option>
+                @for (user of lookups['users'] || []; track user.value) {
+                  <option [value]="user.value">{{ user.label }}</option>
+                }
+              </select></label
+            >
+          </div>
+        }
+        @if (formError()) {
+          <div class="alert error">{{ formError() }}</div>
+        }
+        <div class="form-actions">
+          <button
+            class="button secondary"
+            [disabled]="busy() || !comment.trim()"
+            (click)="complaintUpdate('comment')"
+          >
+            Add comment
+          </button>
+          @if (session.can('COMPLAINT_UPDATE')) {
+            <button
+              class="button primary"
+              [disabled]="busy() || !comment.trim()"
+              (click)="complaintUpdate('update')"
+            >
+              Update complaint
+            </button>
+          }
+          @if (
+            row['createdBy'] === session.user()?.id &&
+            ['CLOSED', 'RESOLVED', 'REJECTED'].includes(row['status'])
+          ) {
+            <button
+              class="button primary"
+              [disabled]="busy() || !comment.trim()"
+              (click)="complaintUpdate('reopen')"
+            >
+              Reopen
+            </button>
+          }
+        </div>
+      } @else {
+        <dl class="detail-grid">
+          @for (field of detailFields(row); track field[0]) {
+            <div>
+              <dt>{{ pretty(field[0].replaceAll('Id', '').replaceAll('Json', '')) }}</dt>
+              <dd class="preline">{{ cell(row, field[0]) }}</dd>
+            </div>
+          }
+        </dl>
+        @if (key === 'notices') {
+          <div class="form-actions">
+            @for (action of actions(row); track action.key) {
+              <button
+                class="button primary"
+                [disabled]="busy()"
+                (click)="act(row, action.key); detail.set(null)"
+              >
+                {{ action.label }}
+              </button>
+            }
+          </div>
+        }
+        @if (key === 'audit' || key === 'system-audit') {
+          <h3>Before</h3>
+          <pre class="audit-json">{{ row['oldValueJson'] || '—' }}</pre>
+          <h3>After</h3>
+          <pre class="audit-json">{{ row['newValueJson'] || '—' }}</pre>
+        }
+      }
+      @if (attachments(row).length && session.can('DOCUMENT_READ')) {
+        <div class="detail-section no-print">
+          <h3>Attachments</h3>
+          <div class="row-actions">
+            @for (attachment of attachments(row); track attachment.value) {
+              <button class="small-button" (click)="downloadAttachment(attachment)">
+                <app-icon name="download" />{{ attachment.label }}
+              </button>
+            }
+          </div>
+        </div>
+      }
+      <p class="print-footer">All rights reserved by Sarvesh Barve</p>
+    </section>
+  </div>
+}

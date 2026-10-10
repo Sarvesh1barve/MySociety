@@ -1,0 +1,48 @@
+name: Deploy GitHub Pages
+on:
+  push:
+    branches: [main]
+    paths: ['frontend/**', 'scripts/write-runtime-config.mjs', '.github/workflows/deploy-pages.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test -- --watch=false
+        working-directory: frontend
+      - name: Write public runtime configuration
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: node scripts/write-runtime-config.mjs
+      - name: Build PWA for this repository
+        working-directory: frontend
+        run: npm run build -- --base-href "/${GITHUB_REPOSITORY#*/}/"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist/frontend/browser
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
