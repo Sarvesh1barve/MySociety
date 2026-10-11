@@ -9,6 +9,8 @@ export default defineConfig({
   use: {
     baseURL: process.env['E2E_BASE_URL'] || 'http://localhost:4200',
     headless: true,
+    // Runtime overrides must reach the isolated API on every reload, never the live API.
+    serviceWorkers: process.env['E2E_ISOLATED'] === 'true' ? 'block' : 'allow',
     viewport: { width: 1440, height: 1050 },
     trace: 'off',
     screenshot: 'only-on-failure',

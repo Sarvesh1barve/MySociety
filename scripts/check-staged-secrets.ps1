@@ -10,6 +10,14 @@ if (Test-Path -LiteralPath '.env') {
   if ($line -match '^([A-Z_]*(PASSWORD|SECRET|TOKEN)[A-Z_]*)=(.+)$' -and $Matches[3].Length -ge 8) { $secrets += $Matches[3] }
  }
 }
+if (Test-Path -LiteralPath '.local/SUPER_ADMIN_ACCESS.md') {
+ foreach ($line in Get-Content -LiteralPath '.local/SUPER_ADMIN_ACCESS.md') {
+  if ($line -match '^\- ([A-F0-9]{8}(?:\-[A-F0-9]{8}){3})$') { $secrets += $Matches[1] }
+ }
+}
+if (Test-Path -LiteralPath '.local/e2e-credentials.json') {
+ $secrets += (Get-Content -LiteralPath '.local/e2e-credentials.json' -Raw | ConvertFrom-Json).password
+}
 foreach ($path in $tracked) {
  if ($path -match '\.(png|ico)$') { continue }
  $content = git show ":$path" | Out-String

@@ -31,7 +31,7 @@ public class RequestFilter extends OncePerRequestFilter {
     res.setHeader("Cache-Control", "no-store");
     org.slf4j.MDC.put("correlationId", correlation);
     try {
-      if (req.getRequestURI().equals("/api/v1/auth/login") && req.getMethod().equals("POST")) {
+      if (req.getRequestURI().startsWith("/api/v1/auth/") && req.getMethod().equals("POST")) {
         long now = System.currentTimeMillis();
         logins.entrySet().removeIf(e -> now - e.getValue().start > 300000);
         // Ignore untrusted forwarding headers. ngrok requests may share this network limit.

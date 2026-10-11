@@ -111,7 +111,50 @@ export class Dashboard implements OnDestroy {
         route: '/' + map[n][1],
       }));
   }
-  get quickActions() {
+  get quickActions(): {
+    label: string;
+    sub: string;
+    icon: string;
+    route: string;
+    permission?: string;
+    query?: Record<string, string>;
+  }[] {
+    if (
+      !this.isPlatform &&
+      this.session.can('VISITOR_CHECKIN') &&
+      !this.session.can('MEMBERSHIP_MANAGE')
+    )
+      return [
+        {
+          label: 'VISITOR',
+          sub: 'Record a visitor at the gate',
+          icon: 'visitor',
+          route: '/visitors',
+          query: { action: 'create' },
+        },
+        {
+          label: 'EXPECTED VISITOR',
+          sub: 'Find someone arriving today',
+          icon: 'calendar',
+          route: '/visitors',
+          query: { status: 'EXPECTED' },
+        },
+        {
+          label: 'PARCEL',
+          sub: 'Receive a delivery',
+          icon: 'parcel',
+          route: '/parcels',
+          query: { action: 'create' },
+        },
+        {
+          label: 'CHECK OUT',
+          sub: 'Record a visitor leaving',
+          icon: 'visitor',
+          route: '/visitors',
+          query: { status: 'CHECKED_IN' },
+        },
+        { label: 'EMERGENCY', sub: 'Call for help', icon: 'phone', route: '/emergency-contacts' },
+      ];
     return this.isPlatform
       ? [
           {
@@ -141,11 +184,12 @@ export class Dashboard implements OnDestroy {
         ]
       : [
           {
-            label: this.session.can('VISITOR_CHECKIN') ? 'Gate visitors' : 'Invite a visitor',
+            label: 'Add Visitor',
             sub: 'A smoother welcome',
             icon: 'visitor',
             route: '/visitors',
             permission: 'VISITOR_CREATE',
+            query: { action: 'create' },
           },
           {
             label: 'Raise a complaint',
@@ -153,9 +197,10 @@ export class Dashboard implements OnDestroy {
             icon: 'complaint',
             route: '/complaints',
             permission: 'COMPLAINT_CREATE',
+            query: { action: 'create' },
           },
           {
-            label: 'View parcels',
+            label: 'My Parcels',
             sub: 'Your deliveries, in one place',
             icon: 'parcel',
             route: '/parcels',
@@ -167,6 +212,34 @@ export class Dashboard implements OnDestroy {
             icon: 'phone',
             route: '/emergency-contacts',
             permission: 'EMERGENCY_READ',
+          },
+          {
+            label: 'My Visitors',
+            sub: 'Approve and track visits',
+            icon: 'visitor',
+            route: '/visitors',
+            permission: 'VISITOR_READ',
+          },
+          {
+            label: 'My Complaints',
+            sub: 'Follow your requests',
+            icon: 'complaint',
+            route: '/complaints',
+            permission: 'COMPLAINT_READ',
+          },
+          {
+            label: 'Notices',
+            sub: 'Community updates',
+            icon: 'notice',
+            route: '/notices',
+            permission: 'NOTICE_READ',
+          },
+          {
+            label: 'Meetings',
+            sub: 'Dates and decisions',
+            icon: 'calendar',
+            route: '/meetings',
+            permission: 'MEETING_READ',
           },
         ].filter((a) => this.session.can(a.permission));
   }

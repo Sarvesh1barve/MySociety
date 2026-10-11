@@ -8,6 +8,9 @@ import java.time.*;
 @Table(name = "societies")
 public class Society extends BaseEntity {
   @Column(columnDefinition = "text")
+  public String theme = "FOREST";
+
+  @Column(columnDefinition = "text")
   public String name;
 
   @Column(columnDefinition = "text")

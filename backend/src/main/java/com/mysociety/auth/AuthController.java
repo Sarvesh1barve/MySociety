@@ -48,7 +48,7 @@ public class AuthController {
 
   @PostMapping("/auth/login")
   public Map<String, Object> login(@Valid @RequestBody Login body) {
-    String identifier = body.login().trim().toLowerCase(Locale.ROOT);
+    String identifier = Input.login(body.login());
     throttle.check(identifier);
     Account a = accounts.findByLogin(identifier).orElse(null);
     boolean valid =

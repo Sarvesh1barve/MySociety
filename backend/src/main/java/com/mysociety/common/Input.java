@@ -97,7 +97,18 @@ public class Input {
     String v = required ? required(key, 20) : text(key, 20);
     if (v != null && !v.matches("\\+?[0-9][0-9 -]{6,18}"))
       throw ApiException.bad("Enter a valid phone number.");
-    return v;
+    return v == null ? null : normalizeMobile(v);
+  }
+
+  public static String normalizeMobile(String value) {
+    String digits = value.replaceAll("[ +()-]", "");
+    if (digits.matches("[0-9]{10}")) return "+91" + digits;
+    return "+" + digits;
+  }
+
+  public static String login(String value) {
+    String v = value.trim().toLowerCase(Locale.ROOT);
+    return v.contains("@") ? v : normalizeMobile(v);
   }
 
   public String email(String key) {

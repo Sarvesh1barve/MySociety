@@ -1,7 +1,7 @@
 param([switch]$Dev)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/import-env.ps1"
-$selectedPort = if ($env:SERVER_PORT) { [int]$env:SERVER_PORT } else { 8080 }
+$selectedPort = if ($env:SERVER_PORT) { [int]$env:SERVER_PORT } else { 8081 }
 while (Get-NetTCPConnection -LocalPort $selectedPort -State Listen -ErrorAction SilentlyContinue) { $selectedPort++ }
 $env:SERVER_PORT = "$selectedPort"
 $projectRoot = Split-Path $PSScriptRoot -Parent

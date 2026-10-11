@@ -14,6 +14,10 @@
   </div>
   <div class="today"><app-icon name="calendar" />{{ date }}</div>
 </section>
+<p class="account-safety-note">
+  Protect your account:
+  <a routerLink="/profile">save your password recovery codes in Your profile</a>.
+</p>
 @if (error()) {
   <div class="alert error" role="alert">
     {{ error() }}<button class="text-button" (click)="load()">Try again</button>
@@ -80,8 +84,8 @@
     <span class="muted">{{ 'Less tapping. More living.' | t }}</span>
   </div>
   <div class="quick-grid">
-    @for (action of quickActions; track action.route) {
-      <a class="quick-card" [routerLink]="action.route"
+    @for (action of quickActions; track action.label) {
+      <a class="quick-card" [routerLink]="action.route" [queryParams]="action.query"
         ><div class="quick-icon"><app-icon [name]="action.icon" /></div>
         <div>
           <strong>{{ action.label | t }}</strong

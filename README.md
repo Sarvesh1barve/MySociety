@@ -7,6 +7,8 @@ The UI includes **All rights reserved by Sarvesh Barve** on login and throughout
 ## What works
 
 - Global email/mobile and password login, BCrypt, one-hour JWT sessions, password changes with session revocation, and login throttling.
+- Editable login email/mobile, one-time password recovery codes for every role, and verified Super Admin-assisted recovery for non-owner accounts.
+- Six per-society colour themes configurable by Super Admin or a society administrator with Society Settings permission.
 - Platform owner: create/edit/activate/suspend societies, create global users, assign memberships, edit branding and role permissions, inspect audits and diagnostics.
 - Multiple memberships and multiple roles per society; switch communities without signing out.
 - Buildings, optional wings/floors, flats, resident profiles, dated resident–flat links and individual staff accounts.
@@ -80,7 +82,7 @@ On the implementation machine, portable PostgreSQL binaries are in ignored `.too
 
 ```powershell
 # From the repository root:
-.\scripts\start-backend.ps1 -Dev
+.\scripts\start-backend.ps1
 ```
 
 The script imports `.env`, finds an available port starting from `SERVER_PORT`, prints the actual port, records it in `.local/backend-port.txt`, and updates the single local frontend runtime config. It never terminates an existing port owner.
@@ -90,12 +92,12 @@ Equivalent manual startup:
 ```powershell
 . .\scripts\import-env.ps1
 $env:SERVER_PORT = '8081'
-$env:SPRING_PROFILES_ACTIVE = 'dev'
+Remove-Item Env:SPRING_PROFILES_ACTIVE -ErrorAction SilentlyContinue
 cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-Production-like mode: omit `-Dev` (or remove `SPRING_PROFILES_ACTIVE`). That disables demo seeding and OpenAPI. Flyway runs on startup; Hibernate validates the migrated schema rather than generating it.
+Production-like mode: omit `-Dev` (or remove `SPRING_PROFILES_ACTIVE`). That disables OpenAPI. Demo seeding is no longer part of the application in any profile. Flyway runs on startup; Hibernate validates the migrated schema rather than generating it.
 
 Linux/macOS, after exporting the same environment variables:
 
@@ -118,19 +120,12 @@ INITIAL_SUPER_ADMIN_PASSWORD
 
 Changing those variables later does **not** reset an existing owner.
 
-The dev profile seeds two societies only when the societies table is empty. It requires a separately configured `DEMO_PASSWORD`. No demo password is compiled into the app or checked into Git.
+Normal startup never creates demo users, residents, visitors or societies, even with the dev profile. Test fixtures live only in `backend/src/test` and are not packaged in the production JAR.
 
-| Account | Login | Access |
-| --- | --- | --- |
-| Platform owner | `INITIAL_SUPER_ADMIN_EMAIL` | Platform management |
-| Secretary | `secretary@demo.local` | Secretary + owner in Demo CHS; owner only in Sai Darshan |
-| Watchman | `watchman@demo.local` | Gate operations in Demo CHS |
-| Resident | `resident@demo.local` | A-101 in Demo CHS |
-| Second resident | `resident2@demo.local` | C-704 in Sai Darshan |
+Residents register at `/#/signup`, sign in, enter a society code and request access. An authorised administrator reviews **Join requests**, verifies the flat and approves an owner/tenant/family-member role. Signup alone grants no society permissions.
 
-The local initialization script generated random passwords in the ignored `.env`: owner password is `INITIAL_SUPER_ADMIN_PASSWORD`; demo accounts use `DEMO_PASSWORD`. Read that local file to sign in. Do not publish it or send it with a support report.
+The owner password is generated locally in the ignored `.env`; the private handover is `.local/SUPER_ADMIN_ACCESS.md`. Changing bootstrap variables does not reset an existing account. See [Super Admin guide](docs/SUPER_ADMIN_GUIDE.md) for changing login details/password and saving recovery codes.
 
-For a real deployment use a clean database without the dev profile, a real owner email, then create a society, users, memberships, resident profiles and flat links through the UI.
 
 ## Frontend
 
@@ -213,11 +208,13 @@ npx playwright install chromium
 npx playwright test
 ```
 
-Browser tests require the local frontend and dev backend running, and read local generated demo credentials from ignored `.env`. CI can pass `E2E_PASSWORD` and `E2E_OWNER_PASSWORD` instead.
+Mutating browser tests require the isolated loopback API on 8091 and `mysociety_e2e`. Start the frontend, build the backend test classpath, then run `scripts/run-browser-tests.ps1`. They cannot fall back to the live API. See docs/LOCAL_SETUP.md.
 
 The tests cover login, membership/role isolation, society switching, visitor lifecycle, flat privacy, parcels, complaints, notices, minutes locks, protected documents, audits, CORS, runtime config, guards, mobile layout and failure messages.
 
 ## Backup and recovery
+
+For owner login, account changes, recovery codes, society themes and full operating steps, read the [Super Admin guide](docs/SUPER_ADMIN_GUIDE.md). All users can generate one-time password recovery codes in their profile. Super Admin can assist non-owner accounts after identity verification; there is no public owner-account bypass.
 
 ```powershell
 .\scripts\backup.ps1

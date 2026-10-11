@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { ReactiveFormsModule, FormControl, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { AppConfigService } from '../core/app-config.service';
 import { SessionService } from '../core/session.service';
@@ -10,7 +10,7 @@ import { TranslatePipe } from '../core/i18n.service';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [ReactiveFormsModule, Icon, TranslatePipe],
+  imports: [ReactiveFormsModule, RouterLink, Icon, TranslatePipe],
   template: `
     <div class="login-layout">
       <section class="login-story">
@@ -46,6 +46,9 @@ import { TranslatePipe } from '../core/i18n.service';
           <p class="eyebrow">{{ 'WELCOME HOME' | t }}</p>
           <h2>{{ 'A little closer starts here.' | t }}</h2>
           <p class="subtitle">{{ 'Sign in to your society account.' | t }}</p>
+          @if (notice) {
+            <div class="alert success" role="status">{{ notice }}</div>
+          }
           @if (config.error()) {
             <div class="alert error" role="alert">{{ config.error() }}</div>
           }
@@ -79,8 +82,9 @@ import { TranslatePipe } from '../core/i18n.service';
               {{ (busy() ? 'Signing in…' : 'Sign in') | t }}<app-icon name="arrow" />
             </button>
           </form>
+          <a routerLink="/forgot-password" class="text-link recovery-link">Forgot password?</a>
           <p class="login-help">
-            {{ 'New to your society? Ask your society administrator to create your account.' | t }}
+            New here? <a routerLink="/signup" class="text-link">Create Account</a>
           </p>
           <div class="secure-note">
             <app-icon name="shield" />{{ 'Your community. Your privacy. Always.' | t }}
@@ -96,6 +100,12 @@ export class Login {
   config = inject(AppConfigService);
   session = inject(SessionService);
   router = inject(Router);
+  private route = inject(ActivatedRoute);
+  notice = this.route.snapshot.queryParamMap.has('loginChanged')
+    ? 'Login details updated. Use your new email or mobile number.'
+    : this.route.snapshot.queryParamMap.has('passwordChanged')
+      ? 'Password updated. Sign in with your new password.'
+      : '';
   busy = signal(false);
   error = signal('');
   showPassword = false;

@@ -65,6 +65,19 @@ public class StructureController {
     return Views.of(v);
   }
 
+  @PatchMapping("/society/theme")
+  public Map<String, Object> theme(
+      @RequestHeader("X-Society-Id") UUID s, @RequestBody Map<String, Object> body) {
+    access.require(s, "SOCIETY_UPDATE");
+    Society society = db.get(Society.class, s);
+    String before = audit.snapshot(society);
+    society.theme =
+        new Input(body)
+            .choice("theme", society.theme, "FOREST", "OCEAN", "INDIGO", "ROSE", "AMBER", "SLATE");
+    audit.log(s, "SOCIETY_THEME_CHANGED", society, before);
+    return Views.of(society);
+  }
+
   @GetMapping("/buildings")
   public List<Map<String, Object>> buildings(@RequestHeader("X-Society-Id") UUID s) {
     access.require(s, "FLAT_READ");
@@ -219,6 +232,13 @@ public class StructureController {
         .map(
             v -> {
               var m = Views.of(v);
+              Account account = v.userId == null ? null : db.get(Account.class, v.userId);
+              m.put(
+                  "loginAccount",
+                  account == null
+                      ? "No sign-in account linked"
+                      : Objects.toString(account.email, account.mobile));
+              m.put("accountStatus", account == null ? "NO_ACCOUNT" : account.status);
               m.put(
                   "mappings",
                   db.list(ResidentFlatMapping.class, s).stream()
@@ -261,6 +281,12 @@ public class StructureController {
     v.mobile = i.mobile("mobile", false);
     v.email = i.email("email");
     v.active = i.bool("active", true);
+    if (i.has("userId") && !Objects.equals(v.userId, i.id("userId"))) {
+      access.require(s, "USER_MANAGE");
+      UUID userId = i.id("userId");
+      access.activeUserInSociety(s, userId);
+      v.userId = userId;
+    }
     audit.log(s, "RESIDENT_UPDATED", v, before);
     return Views.of(v);
   }
@@ -325,6 +351,34 @@ public class StructureController {
             m -> {
               var v = Views.of(m);
               v.put("user", Views.of(db.get(Account.class, m.userId)));
+              var profiles =
+                  db.query(
+                      ResidentProfile.class,
+                      "societyId=:s and userId=:u",
+                      Map.of("s", s, "u", m.userId));
+              v.put("residentProfiles", profiles.stream().map(Views::of).toList());
+              var ids =
+                  profiles.stream().map(p -> p.id).collect(java.util.stream.Collectors.toSet());
+              var mappings =
+                  db.list(ResidentFlatMapping.class, s).stream()
+                      .filter(x -> ids.contains(x.residentId))
+                      .toList();
+              v.put("flatMappings", mappings.stream().map(Views::of).toList());
+              LocalDate today = LocalDate.now(ZoneId.of(db.get(Society.class, s).timezone));
+              v.put(
+                  "homes",
+                  mappings.stream()
+                      .filter(
+                          x ->
+                              (x.endDate == null || x.endDate.isAfter(today))
+                                  && (x.startDate == null || !x.startDate.isAfter(today)))
+                      .map(
+                          x ->
+                              db.tenant(Flat.class, s, x.flatId).flatNumber
+                                  + " ("
+                                  + x.relationshipType
+                                  + ")")
+                      .collect(java.util.stream.Collectors.joining(", ")));
               return v;
             })
         .toList();
@@ -353,7 +407,12 @@ public class StructureController {
     access.platform();
     Input i = new Input(b);
     UUID uid = i.requiredId("userId");
-    db.get(Account.class, uid);
+    Account account = db.get(Account.class, uid);
+    if (account.superAdmin)
+      throw ApiException.bad(
+          "The platform owner already manages every society and does not need a membership.");
+    if (!"ACTIVE".equals(account.status))
+      throw ApiException.bad("Activate this account before assigning a society.");
     Membership m = new Membership();
     m.societyId = s;
     m.userId = uid;

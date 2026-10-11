@@ -13,7 +13,7 @@ The footer ownership statement is fixed independently of editable platform brand
 - No real credentials, uploads, PostgreSQL data, dumps or ngrok tokens in source control.
 - Local API port 8081 chosen because 8080 was occupied. Local project PostgreSQL on 5433 because 5432 was occupied.
 - Real PostgreSQL integration tests validate migrations and Hibernate schema compatibility.
-- Dev credentials are random environment values; demo seeding is conditional on the dev profile and an empty societies table.
+- Normal startup never seeds demo data. Fixtures exist only under src/test, using isolated test databases and random credentials; they are excluded from the application JAR.
 - No public static file server for uploads; protected downloads only.
 - Approved minutes and published notices are immutable. Corrections use a new record.
 - No hard deletion APIs for historical business records.
@@ -30,7 +30,7 @@ This is an MVP, not an externally audited or load-tested commercial service.
 - English is complete; Marathi/Hindi cover common navigation and actions with English fallback. Full translation review remains future work.
 - In-app notifications only; no push/SMS/email dispatch. Generic notice notifications may reach members outside a targeted audience, but content and records remain protected.
 - Files receive type/size/signature/path validation, but no antivirus engine or content-disarm pipeline.
-- Password reset/account recovery, invitation delivery, MFA, refresh tokens and persistent cross-tab login are not included. An administrator creates accounts and securely communicates initial passwords.
+- Password recovery uses five one-time, high-entropy codes generated in the user's profile after password confirmation. Only hashes are stored. Public recovery consumes a code atomically and revokes existing sessions. Email/OTP recovery, invitation delivery, MFA, refresh tokens and persistent cross-tab login are not included. Super Admin can reset non-owner accounts after identity verification; a platform owner without both password and recovery codes needs controlled local database-administrator intervention.
 - Published notice corrections and approved MOM amendments use new records; a formal amendment/version comparison workflow is not implemented.
 - Complaint attachments use already uploaded authorized document IDs. The initial default resident role does not include DOCUMENT_UPLOAD; a platform administrator can grant that permission if resident uploads are desired.
 - Building/wing/floor creation is supported; flat/resident/contact/society edits and occupancy-ending operations are provided. Renaming/deactivating hierarchy nodes is not exposed in this first UI.
@@ -40,7 +40,9 @@ This is an MVP, not an externally audited or load-tested commercial service.
 
 ## Recommended next steps
 
-Pilot with one society using a clean real-data database and individual staff accounts. Test the full gate workflow with real phones/tablets, restore a backup, and review role permissions with the committee. After feedback, prioritize server pagination, account recovery, full translations, invitation delivery and safer public upload processing. Move the backend/database to managed infrastructure when availability requirements justify it.
+Pilot with one society using a clean real-data database and individual staff accounts. Test the full gate workflow with real phones/tablets, restore a backup, save recovery codes, and review role permissions with the committee. After feedback, prioritize server pagination, full translations, invitation delivery and safer public upload processing. Move the backend/database to managed infrastructure when availability requirements justify it.
+
+Six per-society colour palettes are available to platform owners and members with SOCIETY_UPDATE permission. Themes persist across refreshes and society switches; users without that permission cannot change them. Profile screens let every role change its name, login email/mobile and password. See SUPER_ADMIN_GUIDE.md for step-by-step operation.
 
 ## Verification evidence
 

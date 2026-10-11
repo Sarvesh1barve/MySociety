@@ -15,8 +15,13 @@ export class ApiService {
   get<T = any>(path: string) {
     return firstValueFrom(this.http.get<T>(this.url(path)));
   }
-  send<T = any>(method: string, path: string, body: unknown = {}) {
-    return firstValueFrom(this.http.request<T>(method, this.url(path), { body }));
+  send<T = any>(method: string, path: string, body: unknown = {}, societyId?: string) {
+    return firstValueFrom(
+      this.http.request<T>(method, this.url(path), {
+        body,
+        ...(societyId ? { headers: { 'X-Society-Id': societyId } } : {}),
+      }),
+    );
   }
   blob(path: string) {
     return firstValueFrom(this.http.get(this.url(path), { responseType: 'blob' }));
@@ -28,13 +33,17 @@ export const apiInterceptor: HttpInterceptorFn = (request, next) => {
     router = inject(Router);
   if (!config.apiBaseUrl || !request.url.startsWith(config.apiBaseUrl + '/api/v1/'))
     return next(request);
-  const publicRequest = ['/auth/login', '/system/health', '/application/config'].some(
-    (p) => request.url === config.apiBaseUrl + '/api/v1' + p,
-  );
+  const publicRequest = [
+    '/auth/login',
+    '/auth/signup',
+    '/auth/forgot-password',
+    '/system/health',
+    '/application/config',
+  ].some((p) => request.url === config.apiBaseUrl + '/api/v1' + p);
   let headers = request.headers;
   if (!publicRequest && session.token())
     headers = headers.set('Authorization', 'Bearer ' + session.token());
-  if (!publicRequest && session.context())
+  if (!publicRequest && session.context() && !headers.has('X-Society-Id'))
     headers = headers.set('X-Society-Id', session.context()!.society.id);
   if (config.ngrokSkipBrowserWarning) headers = headers.set('ngrok-skip-browser-warning', 'true');
   return next(request.clone({ headers })).pipe(

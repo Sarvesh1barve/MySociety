@@ -6,7 +6,6 @@ if (Test-Path -LiteralPath '.env') { throw '.env already exists. Existing settin
 function New-Secret { $bytes = New-Object byte[] 36; $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); $rng.GetBytes($bytes); $rng.Dispose(); [Convert]::ToBase64String($bytes) }
 $dbPassword = New-Secret
 $ownerPassword = New-Secret
-$demoPassword = New-Secret
 $jwtSecret = New-Secret
 $dbPort = 5432
 while (Get-NetTCPConnection -LocalPort $dbPort -State Listen -ErrorAction SilentlyContinue) { $dbPort++ }
@@ -24,7 +23,6 @@ $lines = @(
  'INITIAL_SUPER_ADMIN_NAME=Sarvesh Barve'
  'INITIAL_SUPER_ADMIN_EMAIL=owner@mysociety.local'
  "INITIAL_SUPER_ADMIN_PASSWORD=$ownerPassword"
- "DEMO_PASSWORD=$demoPassword"
  'APP_CORS_ALLOWED_ORIGINS=http://localhost:4200,https://sarvesh1barve.github.io'
  "UPLOAD_DIR=$projectRoot/.local/uploads"
 )

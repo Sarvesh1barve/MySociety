@@ -72,6 +72,15 @@ public class Errors {
     return ResponseEntity.status(413).body(body(413, "Files must be 10 MB or smaller.", Map.of()));
   }
 
+  @ExceptionHandler({
+    org.springframework.web.servlet.resource.NoResourceFoundException.class,
+    org.springframework.web.servlet.NoHandlerFoundException.class
+  })
+  ResponseEntity<?> missing() {
+    return ResponseEntity.status(404)
+        .body(body(404, "This page or resource could not be found.", Map.of()));
+  }
+
   @ExceptionHandler(Exception.class)
   ResponseEntity<?> unexpected(Exception e) {
     org.slf4j.LoggerFactory.getLogger(Errors.class)

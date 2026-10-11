@@ -7,6 +7,7 @@ import { SessionService } from './core/session.service';
 import { AppConfigService } from './core/app-config.service';
 import { ApiService } from './core/api.service';
 import { AuthService } from './core/auth.service';
+import { ThemeService } from './core/theme.service';
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -14,6 +15,7 @@ import { AuthService } from './core/auth.service';
   templateUrl: './app.html',
 })
 export class App implements OnDestroy {
+  theme = inject(ThemeService);
   session = inject(SessionService);
   config = inject(AppConfigService);
   auth = inject(AuthService);
@@ -25,7 +27,11 @@ export class App implements OnDestroy {
   loginPage = signal(this.router.url.startsWith('/login') || this.router.url === '/');
   private nav = this.router.events.subscribe((e) => {
     if (e instanceof NavigationEnd) {
-      this.loginPage.set(e.urlAfterRedirects.startsWith('/login'));
+      this.loginPage.set(
+        ['/login', '/signup', '/forgot-password'].some((path) =>
+          e.urlAfterRedirects.startsWith(path),
+        ),
+      );
       this.menuOpen.set(false);
     }
   });
@@ -39,7 +45,18 @@ export class App implements OnDestroy {
   communityNav = [
     { label: 'Dashboard', path: '/dashboard', icon: 'home' },
     { label: 'Residents', path: '/residents', icon: 'people', permission: 'RESIDENT_READ' },
-    { label: 'Flats & buildings', path: '/flats', icon: 'building', permission: 'FLAT_READ' },
+    {
+      label: 'Flats & buildings',
+      path: '/flats',
+      icon: 'building',
+      permission: 'RESIDENT_READ_ALL',
+    },
+    {
+      label: 'Join requests',
+      path: '/membership-requests',
+      icon: 'people',
+      permission: 'MEMBERSHIP_MANAGE',
+    },
     { label: 'Visitors', path: '/visitors', icon: 'visitor', permission: 'VISITOR_READ' },
     { label: 'Parcels', path: '/parcels', icon: 'parcel', permission: 'PARCEL_READ' },
     { label: 'Complaints', path: '/complaints', icon: 'complaint', permission: 'COMPLAINT_READ' },

@@ -1,0 +1,168 @@
+// Preset palettes only: no user-supplied CSS enters the document.
+html[data-society-theme='OCEAN'] {
+  --green: #126b83;
+  --green-dark: #084c61;
+  --green-soft: #e9f5fa;
+  --canvas: #f5f9fc;
+  --line: #dce8ef;
+  --theme-hero: #e2f1f7;
+  --theme-art: #9ac4d1;
+}
+html[data-society-theme='INDIGO'] {
+  --green: #5048a5;
+  --green-dark: #38307b;
+  --green-soft: #efedfb;
+  --canvas: #f8f7fc;
+  --line: #e4e0f1;
+  --theme-hero: #ece8f8;
+  --theme-art: #b2abd7;
+}
+html[data-society-theme='ROSE'] {
+  --green: #9b3f65;
+  --green-dark: #75284a;
+  --green-soft: #fbeef3;
+  --canvas: #fcf8fa;
+  --line: #efdee5;
+  --theme-hero: #f7e5ed;
+  --theme-art: #d3a2b7;
+}
+html[data-society-theme='AMBER'] {
+  --green: #85540f;
+  --green-dark: #623b07;
+  --green-soft: #fcf3e1;
+  --canvas: #fcfaf5;
+  --line: #eae3d3;
+  --theme-hero: #f5ebd4;
+  --theme-art: #c8b07d;
+}
+html[data-society-theme='SLATE'] {
+  --green: #475569;
+  --green-dark: #29384c;
+  --green-soft: #edf1f6;
+  --canvas: #f7f8fa;
+  --line: #e0e5eb;
+  --theme-hero: #e6ebf1;
+  --theme-art: #a3b0c1;
+}
+
+html[data-society-theme]:not([data-society-theme='FOREST']) {
+  .welcome-banner,
+  .community-card {
+    background: var(--theme-hero);
+    border-color: var(--line);
+  }
+  .welcome-banner h2,
+  .welcome-banner p,
+  .banner-link,
+  .text-link,
+  .read-more {
+    color: var(--green-dark);
+  }
+  .welcome-pill,
+  .quick-icon,
+  .login-icon,
+  .stat-icon.tone-0 {
+    background: var(--green-soft);
+    color: var(--green);
+  }
+  .brand-mark,
+  .button.primary {
+    background: var(--green);
+  }
+  .button.primary:hover {
+    background: var(--green-dark);
+  }
+  .sidebar nav a.active,
+  .sidebar .active,
+  .sidebar nav a:hover {
+    background: var(--green-soft);
+    color: var(--green-dark);
+  }
+  .art-building,
+  .art-tree {
+    background: var(--theme-art);
+  }
+  .art-building i {
+    background: var(--green);
+    opacity: 0.28;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline-color: var(--green);
+  }
+}
+.theme-settings {
+  margin-top: 24px;
+}
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.theme-choice {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--paper);
+  text-align: left;
+  min-height: 88px;
+}
+.theme-choice[aria-pressed='true'] {
+  border-color: var(--swatch);
+  box-shadow: 0 0 0 1px var(--swatch);
+}
+.theme-swatch {
+  display: block;
+  height: 25px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--swatch) 40%, var(--swatch-soft) 40%);
+}
+.recovery-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 30px 16px;
+}
+.recovery-page > section {
+  max-width: 620px;
+  width: 100%;
+  display: grid;
+  gap: 22px;
+}
+.recovery-page form,
+.settings-panel form {
+  display: grid;
+  gap: 16px;
+}
+.recovery-code-panel {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background: var(--green-soft);
+  border-radius: 12px;
+}
+.recovery-code-panel code {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.recovery-link {
+  display: inline-block;
+  margin-top: 18px;
+}
+.account-safety-note {
+  margin: -8px 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-safety-note a {
+  color: var(--green);
+  text-decoration: underline;
+}

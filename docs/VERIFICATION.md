@@ -1,50 +1,44 @@
 # Verification
 
-Verified locally on 10 October 2026.
+Verified locally on 11 October 2026 against PostgreSQL 17.6 and Java 21.
 
 | Check | Result |
 | --- | --- |
-| Java / backend package | Java 21; Maven verify succeeds; executable Spring Boot JAR produced |
-| PostgreSQL / Flyway | Real PostgreSQL 17 on loopback 5433; V1 and V2 migrations applied; Hibernate schema validation passes |
-| Backend integration suite | **14 passed**, 0 failures/errors |
-| Frontend service/guard suite | **12 passed**, 0 failures |
-| Browser application suite | **9 passed**, including two-session visitor lifecycle, complaint timeline, society switching, branding, permission guard, mobile layout and API failure handling |
-| Production PWA suite | **1 passed**: valid manifest, no installability errors, offline application shell, no API/private data/runtime-config in service-worker caches |
-| Angular production build | Passes; approximately 380 kB initial raw bundle / 99 kB estimated transfer, with feature routes lazy-loaded |
-| Dependency audit | npm audit reports **0 vulnerabilities** in the locked frontend dependency tree |
-| API health | UP on localhost:8081 and through the HTTPS ngrok tunnel |
-| OpenAPI | Development /v3/api-docs returns 200; protected operations still require bearer authentication |
-| CORS | Allowed-origin preflight passes; untrusted origin rejected |
-| Backup | PostgreSQL custom-format backup and upload directory saved to a unique ignored local directory |
-| Restore | Restored to separate mysociety_restore_verified database and separate files; 2 societies, 5 accounts and 2 applied migrations verified |
-| Visual QA | Resident/committee desktop and 390-pixel mobile screenshots inspected; no mobile horizontal overflow |
-| Existing services | Existing 8080 and 5432 listeners preserved; project uses 8081 and 5433 |
+| Backend | Maven `verify`: 23 integration tests, zero failures/errors; executable production JAR built |
+| Database | Flyway V1–V4 applied; Hibernate schema validation succeeds |
+| Frontend | 18 unit tests pass; Angular production build passes (389.21 kB initial / approximately 101.64 kB transfer) |
+| Browser application | 17 tests covering themes, recovery/login changes, visitor lifecycle, permissions, tenant switching, signup/approval, user listing/edit/suspend, mobile screens and expired sessions |
+| Production PWA | Installable manifest, offline application shell, no API/private data/runtime-config in service-worker caches |
+| Dependencies | npm audit: zero vulnerabilities in the locked frontend dependency tree |
+| Live data | Only the real Super Admin account remains; owner-edited society/resident configuration preserved |
+| Production profile | Demo fixtures absent from production JAR; Swagger disabled; missing routes return friendly 404 |
 
-## Tests
+## Security and workflow coverage
 
-Backend tests cover authentication, invalid login, unauthenticated access, permission denial, membership checks, cross-society access, role differences after switching, walk-in visitor approval/check-in/check-out, invalid duplicate transitions, expected time windows, visitor denial, parcel privacy/collection, complaint history, notice audiences and acknowledgements, approved MOM locking, file-type rejection, protected documents, platform society creation/branding/status, CORS, same-society flat privacy, ended occupancy and password-change token revocation.
+Backend tests cover valid/invalid login, duplicate signup (normalized email/mobile), weak/mismatched passwords, rejected privileged signup fields, no-membership login, join requests, approval and flat mapping, wrong-society request/flat/entity access, role permissions, user creation/list/edit/suspend/reactivate, token revocation, expired/tampered JWTs and authentication throttling. Existing tests cover resident/watchman visitor approval/check-in/out, parcel privacy, complaints, notice audiences, meeting approval locking, upload validation, private documents and CORS.
 
-Frontend unit tests cover centralized runtime API configuration, protocol validation, ngrok header scoping, dynamic branding, API headers, public requests, login success/failure, context clearing, permission/platform/context guards and logout.
+Recovery tests cover all role types, single-use/rotated/reused codes, concurrent consumption (exactly one succeeds), session revocation, owner login identity changes and restrictions on owner-assisted resets. Browser checks exercise theme controls, persistence and switching, recovery/password/login changes, public signup and pending access, approval through the society-admin UI, sole-society routing and admin-created users appearing after stale search filters.
 
-Browser tests use generated local dev credentials and the real API. The PWA check uses the production build and Chromium installability diagnostics. No screenshots or authentication state containing private data are tracked.
+Mobile checks cover login/signup/dashboard, visitors and forms, parcels, complaints, notices, meetings, emergency and society selection. Profile forms have unique accessible field IDs. Mutating browser tests use only the isolated `mysociety_e2e` database. The separate backend suite resets only `mysociety_test`. Browser service workers are disabled for isolated runtime overrides; production/hosted PWA checks leave them enabled.
 
 ## Commands
 
 ```powershell
 . .\scripts\import-env.ps1
-.\backend\mvnw.cmd -f backend\pom.xml verify
+.\backend\mvnw.cmd -f backend\pom.xml verify dependency:build-classpath '-Dmdep.outputFile=target/test-classpath.txt' '-DincludeScope=test'
 cd frontend
 npm test -- --watch=false
 npm run build
-npx playwright test --grep-invert 'production PWA'
-# Separate production preview:
+npm audit
 cd ..
-node scripts/preview.mjs
-# Another terminal:
+# Start production preview in a separate terminal: node scripts/preview.mjs
+.\scripts\run-browser-tests.ps1
 cd frontend
-$env:E2E_BASE_URL='http://localhost:4201'
 $env:CHECK_PWA='1'
+$env:E2E_BASE_URL='http://localhost:4200'
 npx playwright test e2e/pwa.spec.ts
 ```
 
-Backend tests only reset the dedicated mysociety_test database. Test data and local verification backups remain ignored.
+After Pages deployment, the read-only `hosted.spec.ts` checks owner sign-in, protected-route reload, public signup availability, exact runtime API URL and PWA/offline behavior. Set `HOSTED_URL`, `EXPECTED_API_URL` and `HOSTED_LOGIN_CHECK=1`; credentials are loaded privately from `.env` or environment, never from source. Deployment run results are reported separately in the handover.
+
+Backups, screenshots, credentials, test results, uploads and runtime binaries are ignored and must not be committed. These checks are a security baseline, not an independent penetration test or a guarantee of always-on hosting.

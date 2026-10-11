@@ -3,7 +3,18 @@ import { authGuard, platformGuard, societyGuard, permissionGuard } from './core/
 import { MODULES } from './features/module-definitions';
 const utility = () => import('./features/utility-page').then((m) => m.UtilityPage);
 export const routes: Routes = [
+  { path: 'signup', loadComponent: () => import('./features/signup').then((m) => m.Signup) },
+  {
+    path: 'membership-requests',
+    canActivate: [authGuard, societyGuard, permissionGuard],
+    data: { permission: 'MEMBERSHIP_MANAGE' },
+    loadComponent: () => import('./features/membership-requests').then((m) => m.MembershipRequests),
+  },
   { path: 'login', loadComponent: () => import('./features/login').then((m) => m.Login) },
+  {
+    path: 'forgot-password',
+    loadComponent: () => import('./features/forgot-password').then((m) => m.ForgotPassword),
+  },
   {
     path: 'select-society',
     canActivate: [authGuard],

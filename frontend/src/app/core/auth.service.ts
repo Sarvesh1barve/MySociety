@@ -32,10 +32,18 @@ export class AuthService {
   async loadMemberships() {
     const members = await this.api.get<Membership[]>('/memberships');
     this.session.memberships.set(members);
+    const available = members.filter((m) => ['ACTIVE', 'TRIAL'].includes(m.society.status));
+    const managed = sessionStorage.getItem('ms.managedSociety');
+    if (managed && this.session.user()?.superAdmin) {
+      await this.manageSociety(managed);
+      return;
+    }
     const saved = sessionStorage.getItem('ms.society');
     const selected =
-      members.find((m) => m.societyId === saved) || (members.length === 1 ? members[0] : undefined);
+      available.find((m) => m.societyId === saved) ||
+      (available.length === 1 ? available[0] : undefined);
     if (selected) await this.switchSociety(selected);
+    else this.session.clearContext();
   }
   async switchSociety(membership: Membership) {
     this.session.clearContext();
@@ -52,6 +60,7 @@ export class AuthService {
       this.http.get<Context>(this.api.url('/context'), { headers: { 'X-Society-Id': societyId } }),
     );
     this.session.context.set(context);
+    sessionStorage.setItem('ms.managedSociety', societyId);
   }
   logout() {
     this.session.clear();

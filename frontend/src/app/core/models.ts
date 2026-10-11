@@ -7,6 +7,7 @@ export interface User {
   status: string;
 }
 export interface Society {
+  theme?: string;
   id: string;
   name: string;
   code: string;

@@ -29,7 +29,7 @@ The portable binaries can be obtained from the official PostgreSQL/EDB Windows d
 ## Run
 
 ```powershell
-.\scripts\start-backend.ps1 -Dev
+.\scripts\start-backend.ps1
 # In another terminal:
 cd frontend
 npm ci
@@ -38,18 +38,18 @@ npm start
 .\scripts\start-ngrok.ps1
 ```
 
-Open .env locally for the generated owner and demo passwords. Do not print its contents in logs.
+Open the ignored .local/SUPER_ADMIN_ACCESS.md locally for the owner credentials and recovery codes. Do not print its contents in logs.
 
 ## Package and run without Maven
 
 ```powershell
 . .\scripts\import-env.ps1
 .\backend\mvnw.cmd -f backend\pom.xml verify
-$env:SPRING_PROFILES_ACTIVE = 'dev'
+Remove-Item Env:SPRING_PROFILES_ACTIVE -ErrorAction SilentlyContinue
 java -jar backend/target/my-society-1.0.0.jar
 ```
 
-For real data, remove the dev profile, use a fresh real database and configure the real owner identity before the first startup.
+Use the default profile for real data. Normal startup creates only the required owner, role definitions and application settings. Test users exist only in dedicated test databases.
 
 ## Dev OpenAPI
 
@@ -64,3 +64,15 @@ Backend integration tests intentionally clean and recreate the schema of the ded
 The database, backend, frontend dev server and ngrok are separate processes. Closing a terminal or sleeping the laptop can interrupt them. Stop only processes started for this project. Do not kill a service because it happens to use the preferred port.
 
 No scheduled startup or recurring automation has been installed.
+
+## Isolated browser tests
+
+The mutating browser suites refuse to run against the live API. Keep `npm start` running on 4200, then:
+
+```powershell
+. .\scripts\import-env.ps1
+.\backend\mvnw.cmd -f backend\pom.xml verify dependency:build-classpath '-Dmdep.outputFile=target/test-classpath.txt' '-DincludeScope=test'
+.\scripts\run-browser-tests.ps1
+```
+
+The script creates/reuses only `mysociety_e2e`, starts the test-only fixture server on loopback 8091, supplies separate random credentials, routes browser runtime config to it, and stops only that test process afterwards. PostgreSQL stays private. Fixtures cannot be enabled in the production JAR. `mysociety_test` is separately reset by backend integration tests; never use either test database for real data.

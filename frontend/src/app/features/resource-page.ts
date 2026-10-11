@@ -63,7 +63,15 @@ export class ResourcePage implements OnDestroy {
     this.page = 1;
     this.detail.set(null);
     this.modal.set(false);
-    void this.load();
+    void this.load().then(() => {
+      this.filter = this.route.snapshot.queryParamMap.get('status') || '';
+      if (
+        !this.error() &&
+        this.canCreate &&
+        this.route.snapshot.queryParamMap.get('action') === 'create'
+      )
+        this.create();
+    });
   });
   private pollTimer = setInterval(() => {
     if (
@@ -98,6 +106,7 @@ export class ResourcePage implements OnDestroy {
       const [rows] = await Promise.all([this.api.get<Row[]>(endpoint), this.loadLookups()]);
       if (request !== this.request || generation !== this.session.generation()) return;
       this.rows.set(rows);
+      this.page = Math.min(this.page, this.pageCount);
     } catch (e) {
       if (request === this.request) this.error.set(errorMessage(e));
     } finally {
@@ -268,6 +277,7 @@ export class ResourcePage implements OnDestroy {
           : 'green';
   }
   create() {
+    this.selected.set(null);
     this.editing = null;
     this.formFields = this.def.fields;
     this.formValues = {};
@@ -295,6 +305,7 @@ export class ResourcePage implements OnDestroy {
     this.modal.set(true);
   }
   edit(row: Row) {
+    this.selected.set(null);
     this.editing = row;
     this.formTitle = 'Edit ' + this.def.singular;
     this.formFields = this.def.fields;
@@ -304,9 +315,11 @@ export class ResourcePage implements OnDestroy {
     this.formError.set('');
     if (this.key === 'residents')
       this.formFields = [
-        ...this.def.fields.filter((f) => f.key !== 'userId'),
+        ...this.def.fields,
         { key: 'active', label: 'Active', type: 'checkbox', value: true },
       ];
+    if (this.key === 'platform-users')
+      this.formFields = this.def.fields.filter((f) => f.key !== 'password');
     this.modal.set(true);
   }
   async save(body: Record<string, any>) {
@@ -319,6 +332,13 @@ export class ResourcePage implements OnDestroy {
       await this.api.send(this.formMethod, this.formEndpoint, body);
       this.modal.set(false);
       this.success.set('Saved successfully.');
+      this.search = '';
+      this.filter = '';
+      this.page = 1;
+      if (this.key === 'platform-users' && this.formMethod === 'POST')
+        this.success.set(
+          'Account created. Choose Add membership to give this person society access.',
+        );
       await this.load();
     } catch (e) {
       this.formError.set(errorMessage(e));
@@ -389,6 +409,7 @@ export class ResourcePage implements OnDestroy {
     return a;
   }
   canEdit(row: Row) {
+    if (this.key === 'platform-users' && row['superAdmin']) return false;
     if (!this.def.edit) return false;
     if (this.key === 'meetings')
       return row['momStatus'] !== 'APPROVED' && this.session.can('MEETING_EDIT');
@@ -488,14 +509,22 @@ export class ResourcePage implements OnDestroy {
     this.busy.set(true);
     this.formError.set('');
     try {
-      await this.auth.manageSociety(body['societyId']);
-      await this.api.send('POST', '/society-memberships', {
-        userId: this.selected()!.id,
-        roles: body['roles'],
-      });
+      await this.api.send(
+        'POST',
+        '/society-memberships',
+        {
+          userId: this.selected()!.id,
+          roles: body['roles'],
+        },
+        body['societyId'],
+      );
       this.modal.set(false);
       this.selected.set(null);
       this.success.set('Membership created.');
+      this.search = '';
+      this.filter = '';
+      this.page = 1;
+      await this.load();
     } catch (e) {
       this.formError.set(errorMessage(e));
     } finally {
@@ -514,6 +543,34 @@ export class ResourcePage implements OnDestroy {
     } finally {
       this.busy.set(false);
     }
+  }
+  resetUserPassword(row: Row) {
+    this.selected.set(null);
+    this.editing = null;
+    this.formTitle = 'Reset password for ' + row['name'];
+    this.formValues = {};
+    this.formFields = [
+      {
+        key: 'currentPassword',
+        label: 'Your Super Admin password',
+        type: 'password',
+        required: true,
+        max: 72,
+        hint: 'Verify this user’s identity first. This revokes their sessions and recovery codes.',
+      },
+      {
+        key: 'newPassword',
+        label: 'Temporary password for the user',
+        type: 'password',
+        required: true,
+        max: 72,
+        hint: 'At least 12 characters. Share privately and ask the user to change it and save new recovery codes.',
+      },
+    ];
+    this.formEndpoint = '/auth/admin-reset/' + row.id;
+    this.formMethod = 'POST';
+    this.formError.set('');
+    this.modal.set(true);
   }
   taskStatus(row: Row) {
     this.formTitle = 'Update action';

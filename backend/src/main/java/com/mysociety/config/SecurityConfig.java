@@ -76,7 +76,11 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             a -> {
               a.requestMatchers(
-                      "/api/v1/auth/login", "/api/v1/system/health", "/api/v1/application/config")
+                      "/api/v1/auth/login",
+                      "/api/v1/auth/signup",
+                      "/api/v1/auth/forgot-password",
+                      "/api/v1/system/health",
+                      "/api/v1/application/config")
                   .permitAll();
               if (Arrays.asList(env.getActiveProfiles()).contains("dev"))
                 a.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll();

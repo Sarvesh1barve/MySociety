@@ -35,6 +35,13 @@ public final class Views {
     v.put("version", e.version);
     v.put("createdAt", e.createdAt);
     if (e instanceof TenantEntity t) v.put("societyId", t.societyId);
+    if (e instanceof com.mysociety.membership.MembershipRequest x) {
+      v.put("userId", x.userId);
+      v.put("flatHint", x.flatHint);
+      v.put("status", x.status);
+      v.put("reviewNote", x.reviewNote);
+      v.put("reviewedAt", x.reviewedAt);
+    }
     if (e instanceof Account x) {
       v.put("name", x.name);
       v.put("email", x.email);
@@ -43,6 +50,7 @@ public final class Views {
       v.put("superAdmin", x.superAdmin);
     }
     if (e instanceof Society x) {
+      v.put("theme", x.theme);
       v.put("name", x.name);
       v.put("code", x.code);
       v.put("registrationNumber", x.registrationNumber);

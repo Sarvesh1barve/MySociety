@@ -2,6 +2,7 @@ import { Component, Input, Output, EventEmitter, OnChanges } from '@angular/core
 import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
 import { Field, Option } from '../core/models';
 import { TranslatePipe } from '../core/i18n.service';
+let nextFormId = 0;
 @Component({
   selector: 'app-record-form',
   standalone: true,
@@ -11,6 +12,7 @@ import { TranslatePipe } from '../core/i18n.service';
       @for (field of fields; track field.key) {
         @if (visible(field)) {
           <label
+            [attr.for]="field.type === 'multi' ? null : formId + field.key"
             [class.wide]="
               field.type === 'textarea' || field.type === 'multi' || field.type === 'checkbox'
             "
@@ -27,13 +29,26 @@ import { TranslatePipe } from '../core/i18n.service';
             @switch (field.type) {
               @case ('textarea') {
                 <textarea
+                  [id]="formId + field.key"
                   [formControlName]="field.key"
                   rows="4"
                   [maxlength]="field.max || 12000"
                 ></textarea>
               }
               @case ('select') {
-                <select [formControlName]="field.key">
+                @if (field.lookup === 'flats') {
+                  <input
+                    class="flat-search"
+                    aria-label="Find a flat"
+                    placeholder="Type a flat number to narrow the list"
+                    (input)="flatSearch = $any($event.target).value"
+                  />
+                }
+                <select
+                  [id]="formId + field.key"
+                  [attr.aria-label]="field.label"
+                  [formControlName]="field.key"
+                >
                   <option value="">— {{ 'Select' | t }} —</option>
                   @for (option of options(field); track option.value) {
                     <option [value]="option.value">{{ option.label | t }}</option>
@@ -41,19 +56,29 @@ import { TranslatePipe } from '../core/i18n.service';
                 </select>
               }
               @case ('multi') {
-                <select [formControlName]="field.key" multiple size="5">
+                <div class="choice-list">
                   @for (option of options(field); track option.value) {
-                    <option [value]="option.value">{{ option.label | t }}</option>
-                  }</select
-                ><small>{{ 'Hold Ctrl or Command to select more than one.' | t }}</small>
+                    <span class="choice"
+                      ><input
+                        type="checkbox"
+                        [attr.aria-label]="option.label"
+                        [checked]="form.controls[field.key].value.includes(option.value)"
+                        (change)="toggleChoice(field.key, option.value)"
+                      />{{ option.label | t }}</span
+                    >
+                  }
+                </div>
               }
               @case ('checkbox') {
-                <input type="checkbox" [formControlName]="field.key" /><span>{{
-                  field.label | t
-                }}</span>
+                <input
+                  [id]="formId + field.key"
+                  type="checkbox"
+                  [formControlName]="field.key"
+                /><span>{{ field.label | t }}</span>
               }
               @default {
                 <input
+                  [id]="formId + field.key"
                   [type]="field.type || 'text'"
                   [formControlName]="field.key"
                   [maxlength]="field.max || 500"
@@ -66,7 +91,7 @@ import { TranslatePipe } from '../core/i18n.service';
               <small>{{ field.hint | t }}</small>
             }
             @if (form.controls[field.key].invalid && form.controls[field.key].touched) {
-              <small class="field-error">{{ 'Please enter a valid value.' | t }}</small>
+              <small class="field-error">{{ validationMessage(field) }}</small>
             }
           </label>
         }
@@ -85,6 +110,7 @@ import { TranslatePipe } from '../core/i18n.service';
   </form>`,
 })
 export class RecordForm implements OnChanges {
+  readonly formId = `record-${++nextFormId}-`;
   @Input() fields: Field[] = [];
   @Input() values: Record<string, any> = {};
   @Input() lookups: Record<string, Option[]> = {};
@@ -94,8 +120,25 @@ export class RecordForm implements OnChanges {
   @Output() submitted = new EventEmitter<Record<string, any>>();
   @Output() cancelled = new EventEmitter<void>();
   form = new FormGroup<Record<string, FormControl<any>>>({});
+  flatSearch = '';
+  toggleChoice(key: string, value: string) {
+    const control = this.form.controls[key],
+      values = control.value as string[];
+    control.setValue(
+      values.includes(value) ? values.filter((v) => v !== value) : [...values, value],
+    );
+    control.markAsTouched();
+  }
+  validationMessage(field: Field) {
+    const c = this.form.controls[field.key];
+    if (c.hasError('required')) return field.label + ' is required.';
+    if (c.hasError('email')) return 'Enter a valid email address.';
+    if (c.hasError('minlength')) return 'Use at least 12 characters.';
+    return 'Check ' + field.label.toLowerCase() + '.';
+  }
   ngOnChanges(changes: any) {
     if (!changes.fields && !changes.values) return;
+    this.flatSearch = '';
     const controls: Record<string, FormControl<any>> = {};
     for (const f of this.fields) {
       let v =
@@ -132,7 +175,10 @@ export class RecordForm implements OnChanges {
       )[this.form.value['audience']];
     if (lookup === 'agenda') lookup = 'agenda:' + this.form.value['meetingId'];
     return lookup
-      ? this.lookups[lookup] || []
+      ? (this.lookups[lookup] || []).filter(
+          (o) =>
+            lookup !== 'flats' || o.label.toLowerCase().includes(this.flatSearch.toLowerCase()),
+        )
       : (f.options || []).map((value) => ({ value, label: value.replaceAll('_', ' ') }));
   }
   submit() {

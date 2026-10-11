@@ -53,7 +53,12 @@
         </div>
         <div>
           <dt>Current society</dt>
-          <dd>{{ session.context()?.society?.name || 'Platform' }}</dd>
+          <dd>
+            {{
+              session.context()?.society?.name ||
+                (session.user()?.superAdmin ? 'Platform' : 'No society assigned')
+            }}
+          </dd>
         </div>
         <div>
           <dt>Associated flats</dt>
@@ -61,7 +66,12 @@
         </div>
         <div>
           <dt>Current roles</dt>
-          <dd>{{ session.context()?.roles?.join(', ')?.replaceAll('_', ' ') || 'SUPER ADMIN' }}</dd>
+          <dd>
+            {{
+              session.context()?.roles?.join(', ')?.replaceAll('_', ' ') ||
+                (session.user()?.superAdmin ? 'SUPER ADMIN' : 'No society role yet')
+            }}
+          </dd>
         </div>
       </dl>
       <app-record-form
@@ -84,7 +94,83 @@
         (submitted)="changePassword($event)"
       />
     </section>
+    <section class="panel settings-panel">
+      <h2>Change login email or mobile</h2>
+      <p class="muted">
+        Your email or mobile is your username. Keep at least one. Confirm your current password; all
+        sessions will be signed out after saving.
+      </p>
+      <app-record-form
+        [fields]="loginFields"
+        [values]="loginValues"
+        [busy]="busy()"
+        submitLabel="Update login details"
+        (submitted)="changeLogin($event)"
+      />
+    </section>
+    <section class="panel settings-panel">
+      <h2>Password recovery codes</h2>
+      <p class="muted">
+        Generate and save these before you forget your password. Each code works once for any role,
+        including Super Admin. Generating a new set invalidates all older codes.
+      </p>
+      <p role="status">Unused codes: {{ recoveryRemaining() ?? 'Loading…' }}</p>
+      <form (ngSubmit)="generateRecoveryCodes()">
+        <label
+          >Recovery confirmation password<input
+            name="recoveryPassword"
+            type="password"
+            autocomplete="current-password"
+            maxlength="72"
+            [(ngModel)]="recoveryPassword"
+            required
+        /></label>
+        <button class="button primary" [disabled]="busy() || !recoveryPassword">
+          Generate new recovery codes
+        </button>
+      </form>
+      @if (recoveryCodes().length) {
+        <div class="recovery-code-panel" role="status">
+          <strong>Shown once. Save these privately now.</strong>
+          @for (code of recoveryCodes(); track code) {
+            <code>{{ code }}</code>
+          }
+          <button class="button secondary" (click)="downloadRecoveryCodes()">
+            Download private codes
+          </button>
+          <button class="text-button" (click)="recoveryCodes.set([])">
+            I saved them — hide codes
+          </button>
+        </div>
+      }
+    </section>
   </div>
+}
+@if (key === 'settings') {
+  <section class="panel settings-panel theme-settings">
+    <h2>Society colour theme</h2>
+    <p class="muted">
+      Choose a shared look for {{ session.context()?.society?.name }}. Other societies keep their
+      own colours.
+    </p>
+    <div class="theme-options" role="group" aria-label="Society colour themes">
+      @for (theme of themes; track theme.code) {
+        <button
+          type="button"
+          class="theme-choice"
+          [attr.aria-pressed]="selectedTheme === theme.code"
+          [style.--swatch]="theme.color"
+          [style.--swatch-soft]="theme.soft"
+          (click)="selectedTheme = theme.code"
+        >
+          <span class="theme-swatch" aria-hidden="true"></span>{{ theme.name }}
+        </button>
+      }
+    </div>
+    <button class="button primary" [disabled]="busy()" (click)="saveTheme()">
+      Apply society theme
+    </button>
+  </section>
 }
 @if (key === 'diagnostics') {
   <section class="panel settings-panel">

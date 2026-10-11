@@ -19,12 +19,28 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@org.springframework.context.annotation.Import(DemoTestFixtures.class)
+@AutoConfigureMockMvc(
+    print = org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint.NONE)
 @ActiveProfiles("dev")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PlatformIntegrationTest {
   @Autowired MockMvc mvc;
+  @Test
+  @Order(99)
+  void missingRoutesReturnFriendlyNotFound() throws Exception {
+    request(get("/api/v1/not-a-real-route").header("Authorization", "Bearer " + owner), 404);
+  }
   @Autowired ObjectMapper json;
+  @Autowired org.springframework.security.oauth2.jwt.JwtEncoder jwtEncoder;
+  static int clientNumber = 1;
+  String clientAddress;
+
+  @BeforeEach
+  void isolatedClientWindow() {
+    clientAddress = "127.0.0." + clientNumber++;
+  }
+
   static final String PASSWORD = "Test-" + UUID.randomUUID();
   static String owner,
       secretary,
@@ -76,7 +92,12 @@ class PlatformIntegrationTest {
       org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder b, int status)
       throws Exception {
     return json.readTree(
-        mvc.perform(b)
+        mvc.perform(
+                b.with(
+                    request -> {
+                      request.setRemoteAddr(clientAddress);
+                      return request;
+                    }))
             .andExpect(status().is(status))
             .andReturn()
             .getResponse()
@@ -87,7 +108,7 @@ class PlatformIntegrationTest {
       org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder b,
       String token,
       String society) {
-    b.header("Authorization", "Bearer " + token);
+    if (token != null) b.header("Authorization", "Bearer " + token);
     if (society != null) b.header("X-Society-Id", society);
     return b;
   }
@@ -108,6 +129,205 @@ class PlatformIntegrationTest {
             200)
         .get("token")
         .asText();
+  }
+
+  @Test
+  @Order(20)
+  void publicSignupApprovalAndTenantBoundaries() throws Exception {
+    Map<String, String> signup =
+        Map.of(
+            "name",
+            "New Resident",
+            "email",
+            "signup@test.local",
+            "mobile",
+            "9876543210",
+            "password",
+            PASSWORD,
+            "confirmPassword",
+            PASSWORD);
+    postJson("/auth/signup", null, null, signup, 200);
+    postJson("/auth/signup", null, null, signup, 409);
+    var duplicateMobile = new HashMap<>(signup);
+    duplicateMobile.put("email", "different@test.local");
+    duplicateMobile.put("mobile", "+91 98765 43210");
+    postJson("/auth/signup", null, null, duplicateMobile, 409);
+    var elevated = new HashMap<>(signup);
+    elevated.put("roles", "SUPER_ADMIN");
+    postJson("/auth/signup", null, null, elevated, 400);
+    var mismatch = new HashMap<>(signup);
+    mismatch.put("confirmPassword", "Not-the-same-password");
+    postJson("/auth/signup", null, null, mismatch, 400);
+    var weak = new HashMap<>(signup);
+    weak.put("password", "short");
+    weak.put("confirmPassword", "short");
+    postJson("/auth/signup", null, null, weak, 400);
+    String token = login("signup@test.local");
+    assertFalse(
+        request(auth(get("/api/v1/auth/me"), token, null), 200).get("superAdmin").asBoolean());
+    assertEquals(0, request(auth(get("/api/v1/memberships"), token, null), 200).size());
+    request(auth(get("/api/v1/flats"), token, societyA), 403);
+    request(auth(get("/api/v1/platform/users"), token, null), 403);
+    String requestId =
+        postJson(
+                "/my-membership-requests",
+                token,
+                null,
+                Map.of("societyCode", "DEMO", "flatHint", "A-101"),
+                200)
+            .get("id")
+            .asText();
+    postJson(
+        "/my-membership-requests",
+        token,
+        null,
+        Map.of("societyCode", "DEMO", "flatHint", "A-101"),
+        400);
+    assertEquals(
+        "PENDING",
+        request(auth(get("/api/v1/my-membership-requests"), token, null), 200)
+            .get(0)
+            .get("status")
+            .asText());
+    request(auth(get("/api/v1/membership-requests"), guard, societyA), 403);
+    postJson(
+        "/membership-requests/" + requestId + "/review",
+        token,
+        societyA,
+        Map.of("approve", true, "flatId", flatA, "relationship", "OWNER"),
+        403);
+    postJson(
+        "/membership-requests/" + requestId + "/review",
+        owner,
+        societyB,
+        Map.of("approve", true, "flatId", flatB, "relationship", "OWNER"),
+        403);
+    postJson(
+        "/membership-requests/" + requestId + "/review",
+        secretary,
+        societyA,
+        Map.of("approve", true, "flatId", flatB, "relationship", "OWNER"),
+        403);
+    postJson(
+        "/membership-requests/" + requestId + "/review",
+        secretary,
+        societyA,
+        Map.of("approve", true, "flatId", flatA, "relationship", "SECRETARY"),
+        400);
+    postJson(
+        "/membership-requests/" + requestId + "/review",
+        secretary,
+        societyA,
+        Map.of("approve", true, "flatId", flatA, "relationship", "OWNER"),
+        200);
+    postJson(
+        "/membership-requests/" + requestId + "/review",
+        secretary,
+        societyA,
+        Map.of("approve", false),
+        400);
+    var context = request(auth(get("/api/v1/context"), token, societyA), 200);
+    assertEquals(flatA, context.get("flats").get(0).asText());
+    assertTrue(context.get("roles").toString().contains("RESIDENT_OWNER"));
+    request(auth(get("/api/v1/visitors"), token, societyA), 200);
+    request(auth(get("/api/v1/visitors"), token, societyB), 403);
+    request(auth(get("/api/v1/society-users"), token, societyA), 403);
+    assertTrue(
+        request(auth(get("/api/v1/society-users"), secretary, societyA), 200)
+            .toString()
+            .contains("New Resident"));
+    assertTrue(
+        request(auth(get("/api/v1/society-users"), secretary, societyA), 200)
+            .toString()
+            .contains("flatMappings"));
+  }
+
+  @Test
+  @Order(21)
+  void adminCreationListingEditingSuspensionAndLinking() throws Exception {
+    String id =
+        postJson(
+                "/platform/users",
+                owner,
+                null,
+                Map.of("name", "Managed User", "email", "managed@test.local", "password", PASSWORD),
+                200)
+            .get("id")
+            .asText();
+    String token = login("managed@test.local");
+    JsonNode listed = request(auth(get("/api/v1/platform/users"), owner, null), 200);
+    assertTrue(listed.toString().contains("No Society Assigned"));
+    request(
+        auth(put("/api/v1/platform/users/" + id), owner, null)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Edited User\",\"email\":\"managed@test.local\"}"),
+        200);
+    request(auth(get("/api/v1/auth/me"), token, null), 401);
+    token = login("managed@test.local");
+    request(
+        auth(patch("/api/v1/platform/users/" + id), owner, null)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"SUSPENDED\"}"),
+        200);
+    request(auth(get("/api/v1/auth/me"), token, null), 401);
+    request(
+        post("/api/v1/auth/login")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(
+                json.writeValueAsString(
+                    Map.of("login", "managed@test.local", "password", PASSWORD))),
+        401);
+    request(
+        auth(patch("/api/v1/platform/users/" + id), owner, null)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"ACTIVE\"}"),
+        200);
+    request(auth(get("/api/v1/auth/me"), token, null), 401);
+    postJson(
+        "/society-memberships", owner, societyA, Map.of("userId", id, "roles", "WATCHMAN"), 200);
+    var members = request(auth(get("/api/v1/society-users"), secretary, societyA), 200);
+    assertTrue(members.toString().contains("Edited User"));
+    String gate = login("managed@test.local");
+    request(auth(get("/api/v1/visitors"), gate, societyA), 200);
+    request(auth(get("/api/v1/complaints"), gate, societyA), 403);
+    var created =
+        postJson(
+            "/society-users",
+            secretary,
+            societyA,
+            Map.of(
+                "name",
+                "Direct Society User",
+                "email",
+                "direct@test.local",
+                "password",
+                PASSWORD,
+                "roles",
+                "RESIDENT_TENANT"),
+            200);
+    assertEquals("ACTIVE", created.get("membership").get("status").asText());
+    assertTrue(
+        request(auth(get("/api/v1/society-users"), secretary, societyA), 200)
+            .toString()
+            .contains("Direct Society User"));
+    postJson(
+        "/society-users",
+        secretary,
+        societyA,
+        Map.of(
+            "name",
+            "Attack",
+            "email",
+            "attack@test.local",
+            "password",
+            PASSWORD,
+            "roles",
+            "SUPER_ADMIN"),
+        400);
+    assertFalse(
+        request(auth(get("/api/v1/platform/users"), owner, null), 200)
+            .toString()
+            .contains("attack@test.local"));
   }
 
   @Test
@@ -507,5 +727,277 @@ class PlatformIntegrationTest {
         Map.of("currentPassword", PASSWORD, "newPassword", "Updated-" + UUID.randomUUID()),
         200);
     request(auth(get("/api/v1/auth/me"), resident, null), 401);
+  }
+
+  @Test
+  @Order(15)
+  void themesAreValidatedAuthorizedAndIsolated() throws Exception {
+    request(
+        auth(patch("/api/v1/society/theme"), secretary, societyA)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"theme\":\"OCEAN\"}"),
+        200);
+    assertEquals(
+        "OCEAN",
+        request(auth(get("/api/v1/context"), guard, societyA), 200)
+            .get("society")
+            .get("theme")
+            .asText());
+    assertEquals(
+        "FOREST",
+        request(auth(get("/api/v1/context"), owner, societyB), 200)
+            .get("society")
+            .get("theme")
+            .asText());
+    request(
+        auth(patch("/api/v1/society/theme"), secretary, societyB)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"theme\":\"ROSE\"}"),
+        403);
+    request(
+        auth(patch("/api/v1/society/theme"), guard, societyA)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"theme\":\"ROSE\"}"),
+        403);
+    request(
+        auth(patch("/api/v1/society/theme"), other, societyA)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"theme\":\"ROSE\"}"),
+        403);
+    request(
+        auth(patch("/api/v1/society/theme"), owner, societyB)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"theme\":\"INDIGO\"}"),
+        200);
+    request(
+        auth(patch("/api/v1/society/theme"), owner, societyA)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"theme\":\"url(evil)\"}"),
+        400);
+  }
+
+  JsonNode recover(String email, String code, String password, int expected) throws Exception {
+    return request(
+        post("/api/v1/auth/forgot-password")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(
+                json.writeValueAsString(
+                    Map.of("login", email, "recoveryCode", code, "newPassword", password))),
+        expected);
+  }
+
+  @Test
+  @Order(16)
+  void recoveryWorksForOwnerCommitteeWatchmanAndResidentAndRevokesTokens() throws Exception {
+    for (String email :
+        List.of(
+            "owner@test.local",
+            "secretary@demo.local",
+            "watchman@demo.local",
+            "resident2@demo.local")) {
+      String token = login(email);
+      postJson("/auth/recovery-codes", token, null, Map.of("currentPassword", "wrong"), 400);
+      JsonNode generated =
+          postJson("/auth/recovery-codes", token, null, Map.of("currentPassword", PASSWORD), 200);
+      assertEquals(5, generated.get("codes").size());
+      assertEquals(
+          5,
+          request(auth(get("/api/v1/auth/recovery-codes"), token, null), 200)
+              .get("remaining")
+              .asInt());
+      String code = generated.get("codes").get(0).asText();
+      recover(email, "incorrect-code", PASSWORD, 400);
+      recover("unknown@test.local", code, PASSWORD, 400);
+      String newPassword = "Recovered-" + UUID.randomUUID();
+      recover(email, code, newPassword, 200);
+      recover(email, code, newPassword, 400);
+      request(auth(get("/api/v1/auth/me"), token, null), 401);
+      String newToken =
+          request(
+                  post("/api/v1/auth/login")
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(
+                          json.writeValueAsString(Map.of("login", email, "password", newPassword))),
+                  200)
+              .get("token")
+              .asText();
+      assertEquals(
+          4,
+          request(auth(get("/api/v1/auth/recovery-codes"), newToken, null), 200)
+              .get("remaining")
+              .asInt());
+      JsonNode rotated =
+          postJson(
+              "/auth/recovery-codes", newToken, null, Map.of("currentPassword", newPassword), 200);
+      recover(email, generated.get("codes").get(1).asText(), PASSWORD, 400);
+      recover(email, rotated.get("codes").get(0).asText(), PASSWORD, 200);
+    }
+    owner = login("owner@test.local");
+    secretary = login("secretary@demo.local");
+    guard = login("watchman@demo.local");
+    other = login("resident2@demo.local");
+    String auditText = request(auth(get("/api/v1/platform/audit"), owner, null), 200).toString();
+    assertTrue(auditText.contains("PASSWORD_RECOVERED"));
+    assertFalse(auditText.contains("codeHash"));
+    assertFalse(auditText.contains("passwordHash"));
+  }
+
+  @Test
+  @Order(17)
+  void ownerCanChangeLoginDetailsWithoutLosingGlobalIdentity() throws Exception {
+    String id = request(auth(get("/api/v1/auth/me"), owner, null), 200).get("id").asText();
+    request(
+        auth(put("/api/v1/auth/login-details"), owner, null)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(
+                json.writeValueAsString(
+                    Map.of("email", "owner-new@test.local", "currentPassword", "wrong"))),
+        400);
+    request(
+        auth(put("/api/v1/auth/login-details"), owner, null)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("currentPassword", PASSWORD))),
+        400);
+    request(
+        auth(put("/api/v1/auth/login-details"), owner, null)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(
+                json.writeValueAsString(
+                    Map.of("email", "secretary@demo.local", "currentPassword", PASSWORD))),
+        409);
+    request(
+        auth(put("/api/v1/auth/login-details"), owner, null)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(
+                json.writeValueAsString(
+                    Map.of("email", "owner-new@test.local", "currentPassword", PASSWORD))),
+        200);
+    request(auth(get("/api/v1/auth/me"), owner, null), 401);
+    owner = login("owner-new@test.local");
+    JsonNode me = request(auth(get("/api/v1/auth/me"), owner, null), 200);
+    assertEquals(id, me.get("id").asText());
+    assertTrue(me.get("superAdmin").asBoolean());
+  }
+
+  @Test
+  @Order(18)
+  void ownerAssistedRecoveryRejectsSocietyAdminsAndCannotOverrideOwner() throws Exception {
+    String email = "assisted@test.local";
+    String userId =
+        postJson(
+                "/platform/users",
+                owner,
+                null,
+                Map.of("name", "Recovery Test", "email", email, "password", PASSWORD),
+                200)
+            .get("id")
+            .asText();
+    String token = login(email);
+    String code =
+        postJson("/auth/recovery-codes", token, null, Map.of("currentPassword", PASSWORD), 200)
+            .get("codes")
+            .get(0)
+            .asText();
+    Map<String, String> body =
+        Map.of("currentPassword", PASSWORD, "newPassword", "Temporary-" + UUID.randomUUID());
+    postJson("/auth/admin-reset/" + userId, secretary, null, body, 403);
+    String ownerId = request(auth(get("/api/v1/auth/me"), owner, null), 200).get("id").asText();
+    postJson("/auth/admin-reset/" + ownerId, owner, null, body, 400);
+    postJson(
+        "/auth/admin-reset/" + userId,
+        owner,
+        null,
+        Map.of("currentPassword", "incorrect", "newPassword", PASSWORD),
+        400);
+    postJson("/auth/admin-reset/" + userId, owner, null, body, 200);
+    request(auth(get("/api/v1/auth/me"), token, null), 401);
+    recover(email, code, PASSWORD, 400);
+  }
+
+  @Test
+  @Order(19)
+  void simultaneousRecoveryConsumesACodeOnlyOnce() throws Exception {
+    String email = "race@test.local";
+    postJson(
+        "/platform/users",
+        owner,
+        null,
+        Map.of("name", "Concurrent Recovery", "email", email, "password", PASSWORD),
+        200);
+    String token = login(email);
+    String code =
+        postJson("/auth/recovery-codes", token, null, Map.of("currentPassword", PASSWORD), 200)
+            .get("codes")
+            .get(0)
+            .asText();
+    String body =
+        json.writeValueAsString(
+            Map.of(
+                "login",
+                email,
+                "recoveryCode",
+                code,
+                "newPassword",
+                "Concurrent-" + UUID.randomUUID()));
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+      java.util.concurrent.Callable<Integer> operation =
+          () ->
+              mvc.perform(
+                      post("/api/v1/auth/forgot-password")
+                          .with(
+                              r -> {
+                                r.setRemoteAddr(clientAddress);
+                                return r;
+                              })
+                          .contentType(MediaType.APPLICATION_JSON)
+                          .content(body))
+                  .andReturn()
+                  .getResponse()
+                  .getStatus();
+      var results = pool.invokeAll(List.of(operation, operation));
+      List<Integer> statuses = new ArrayList<>(List.of(results.get(0).get(), results.get(1).get()));
+      Collections.sort(statuses);
+      assertEquals(List.of(200, 400), statuses);
+    }
+  }
+
+  @Test
+  @Order(22)
+  void expiredAndTamperedTokensAndSignupRateLimit() throws Exception {
+    String id = request(auth(get("/api/v1/auth/me"), owner, null), 200).get("id").asText();
+    var claims =
+        org.springframework.security.oauth2.jwt.JwtClaimsSet.builder()
+            .issuer("my-society-api")
+            .subject(id)
+            .issuedAt(Instant.now().minusSeconds(7200))
+            .expiresAt(Instant.now().minusSeconds(3600))
+            .claim("revision", 0)
+            .build();
+    String expired =
+        jwtEncoder
+            .encode(
+                org.springframework.security.oauth2.jwt.JwtEncoderParameters.from(
+                    org.springframework.security.oauth2.jwt.JwsHeader.with(
+                            org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256)
+                        .build(),
+                    claims))
+            .getTokenValue();
+    request(auth(get("/api/v1/auth/me"), expired, null), 401);
+    request(
+        auth(get("/api/v1/auth/me"), owner.substring(0, owner.length() - 8) + "AAAAAAAA", null),
+        401);
+    for (int i = 0; i < 61; i++) {
+      int expected = i < 60 ? 400 : 429;
+      mvc.perform(
+              post("/api/v1/auth/signup")
+                  .with(
+                      q -> {
+                        q.setRemoteAddr("127.8.8.8");
+                        return q;
+                      })
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content("{}"))
+          .andExpect(status().is(expected));
+    }
   }
 }

@@ -370,7 +370,14 @@ export const MODULES: Record<string, ModuleDefinition> = {
     endpoint: '/residents',
     permission: 'RESIDENT_READ',
     createPermission: 'RESIDENT_CREATE',
-    columns: columns('name:Resident', 'mobile:Mobile', 'email:Email', 'active:Active'),
+    columns: columns(
+      'name:Resident',
+      'mobile:Mobile',
+      'email:Email',
+      'active:Active',
+      'loginAccount:Sign-in account',
+      'accountStatus:Account status',
+    ),
     fields: [
       text('name', 'Full name', true, 120),
       text('mobile', 'Mobile', false, 20),
@@ -411,7 +418,14 @@ export const MODULES: Record<string, ModuleDefinition> = {
     endpoint: '/society-users',
     permission: 'RESIDENT_READ_ALL',
     createPermission: 'USER_MANAGE',
-    columns: columns('user.name:Name', 'user.email:Email', 'roles:Roles', 'status:Membership'),
+    columns: columns(
+      'user.name:Name',
+      'user.email:Email',
+      'user.status:Account',
+      'roles:Roles',
+      'status:Membership',
+      'homes:Flat',
+    ),
     fields: [
       text('name', 'Full name', true, 120),
       { ...text('email', 'Email', false, 254), type: 'email' },
@@ -504,13 +518,20 @@ export const MODULES: Record<string, ModuleDefinition> = {
       text('phone', 'Phone', false, 20),
       select('status', 'Status', ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'TRIAL'], 'ACTIVE'),
       text('logoUrl', 'Logo URL (HTTPS)', false, 1000),
+      select(
+        'theme',
+        'Colour theme',
+        ['FOREST', 'OCEAN', 'INDIGO', 'ROSE', 'AMBER', 'SLATE'],
+        'FOREST',
+      ),
     ],
     edit: true,
   },
   'platform-users': {
     title: 'Platform users',
     singular: 'user',
-    description: 'Global identities. Society-specific access.',
+    description:
+      'Create an account, then add a society membership. Residents can also sign up themselves.',
     icon: 'people',
     endpoint: '/platform/users',
     platform: true,
@@ -520,10 +541,13 @@ export const MODULES: Record<string, ModuleDefinition> = {
       'mobile:Mobile',
       'status:Status',
       'superAdmin:Platform owner',
+      'societyAccess:Society access',
+      'societies:Societies',
     ),
+    edit: true,
     fields: [
       text('name', 'Full name', true, 120),
-      text('email', 'Email', false, 254),
+      { ...text('email', 'Email', false, 254), type: 'email' },
       text('mobile', 'Mobile', false, 20),
       {
         key: 'password',

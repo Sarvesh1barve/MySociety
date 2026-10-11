@@ -100,6 +100,7 @@ public class PlatformController {
   }
 
   public static void applySociety(Society s, Input i) {
+    s.theme = i.choice("theme", s.theme, "FOREST", "OCEAN", "INDIGO", "ROSE", "AMBER", "SLATE");
     s.name = i.required("name", 160);
     s.code = i.required("code", 30).toUpperCase(Locale.ROOT);
     if (!s.code.matches("[A-Z0-9_-]+"))
@@ -126,7 +127,45 @@ public class PlatformController {
   @GetMapping("/platform/users")
   public List<Map<String, Object>> users() {
     access.platform();
-    return db.all(Account.class).stream().map(Views::of).toList();
+    return db.all(Account.class).stream().map(this::userView).toList();
+  }
+
+  private Map<String, Object> userView(Account a) {
+    var v = Views.of(a);
+    var memberships = db.query(Membership.class, "userId=:u", Map.of("u", a.id));
+    v.put(
+        "memberships",
+        memberships.stream()
+            .map(
+                m -> {
+                  var item = Views.of(m);
+                  item.put("societyName", db.get(Society.class, m.societyId).name);
+                  return item;
+                })
+            .toList());
+    v.put(
+        "societyAccess",
+        a.superAdmin
+            ? "Platform owner"
+            : !"ACTIVE".equals(a.status)
+                ? "Suspended"
+                : memberships.stream().anyMatch(m -> "ACTIVE".equals(m.status))
+                    ? "Active"
+                    : memberships.stream().anyMatch(m -> "PENDING".equals(m.status))
+                            || db.query(
+                                        MembershipRequest.class,
+                                        "userId=:u and status='PENDING'",
+                                        Map.of("u", a.id))
+                                    .size()
+                                > 0
+                        ? "Pending Approval"
+                        : memberships.isEmpty() ? "No Society Assigned" : "Suspended");
+    v.put(
+        "societies",
+        memberships.stream()
+            .map(m -> db.get(Society.class, m.societyId).name + " (" + m.status + ")")
+            .collect(java.util.stream.Collectors.joining(", ")));
+    return v;
   }
 
   @PostMapping("/platform/users")
@@ -143,14 +182,45 @@ public class PlatformController {
     u.email = i.email("email");
     u.mobile = i.mobile("mobile", false);
     if (u.email == null && u.mobile == null) throw ApiException.bad("Email or mobile is required.");
-    String p = i.required("password", 72);
+    if (!(i.raw("password") instanceof String p)) throw ApiException.bad("Password is required.");
     if (p.length() < 12 || p.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
       throw ApiException.bad(
           "Use at least 12 characters and at most 72 UTF-8 bytes for the password.");
     u.passwordHash = passwords.encode(p);
     u.status = "ACTIVE";
     u.superAdmin = false;
+    if (!db.query(
+            Account.class,
+            "(:e is not null and lower(email)=:e) or (:m is not null and mobile=:m)",
+            new HashMap<>() {
+              {
+                put("e", u.email);
+                put("m", u.mobile);
+              }
+            })
+        .isEmpty())
+      throw new ApiException(
+          org.springframework.http.HttpStatus.CONFLICT,
+          "An account already uses this email or mobile. Sign in or recover your password.");
     return db.save(u);
+  }
+
+  @PutMapping("/platform/users/{id}")
+  public Map<String, Object> editUser(
+      @PathVariable UUID id, @RequestBody Map<String, Object> body) {
+    access.platform();
+    Account a = db.get(Account.class, id);
+    if (a.superAdmin)
+      throw ApiException.bad("Use Your profile to change the platform owner's details.");
+    Input i = new Input(body);
+    String before = audit.snapshot(a);
+    a.name = i.required("name", 120);
+    a.email = i.email("email");
+    a.mobile = i.mobile("mobile", false);
+    if (a.email == null && a.mobile == null) throw ApiException.bad("Email or mobile is required.");
+    a.tokenVersion++;
+    audit.log(null, "USER_DETAILS_CHANGED", a, before);
+    return userView(a);
   }
 
   @PatchMapping("/platform/users/{id}")
@@ -160,6 +230,7 @@ public class PlatformController {
     if (a.superAdmin) throw ApiException.bad("Platform owner status cannot be changed here.");
     String before = audit.snapshot(a);
     a.status = new Input(b).choice("status", a.status, "ACTIVE", "SUSPENDED", "INACTIVE");
+    a.tokenVersion++;
     audit.log(null, "USER_STATUS_CHANGED", a, before);
     return Views.of(a);
   }

@@ -28,6 +28,7 @@ export class SessionService {
     this.context.set(null);
     this.generation.update((v) => v + 1);
     sessionStorage.removeItem('ms.society');
+    sessionStorage.removeItem('ms.managedSociety');
   }
   clear() {
     this.setToken('');

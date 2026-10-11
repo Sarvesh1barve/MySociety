@@ -19,6 +19,16 @@
   </nav>
 }
 @if (isPeople) {
+  @if (key === 'residents') {
+    <p class="account-safety-note">
+      Resident details and sign-in accounts are separate. Updating a resident's name or contact
+      details does not change their login. Link an approved society user to give them access to
+      their flat.
+    </p>
+  }
+  @if (session.can('MEMBERSHIP_MANAGE')) {
+    <p><a routerLink="/membership-requests" class="button secondary">Review join requests</a></p>
+  }
   <nav class="tabs">
     <a routerLink="/residents" [class.active]="key === 'residents'">{{ 'Residents' | t }}</a
     ><a routerLink="/mappings" [class.active]="key === 'mappings'">{{ 'Flat links' | t }}</a>
@@ -101,7 +111,7 @@
           @for (row of visibleRows; track row.id) {
             <tr>
               @for (column of def.columns; track column.key; let first = $first) {
-                <td [class.primary-cell]="first">
+                <td [class.primary-cell]="first" [attr.data-label]="column.label">
                   @if (first) {
                     <button class="record-link" (click)="open(row)">
                       {{ cell(row, column.key) }}
@@ -145,11 +155,18 @@
                       {{ 'Access' | t }}
                     </button>
                   }
-                  @if (key === 'platform-users') {
+                  @if (key === 'platform-users' && !row['superAdmin']) {
                     <button class="small-button" (click)="linkUser(row)">
                       {{ 'Add membership' | t }}
                     </button>
                     @if (!row['superAdmin']) {
+                      <button
+                        class="small-button"
+                        [disabled]="busy()"
+                        (click)="resetUserPassword(row)"
+                      >
+                        Reset password
+                      </button>
                       <button class="small-button" [disabled]="busy()" (click)="toggleUser(row)">
                         {{ row['status'] === 'ACTIVE' ? 'Suspend' : 'Activate' }}
                       </button>

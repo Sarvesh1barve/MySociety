@@ -9,6 +9,7 @@ import { TranslatePipe } from '../core/i18n.service';
 import { RecordForm } from '../shared/record-form';
 import { Icon } from '../shared/icon';
 import { Field, Row } from '../core/models';
+import { THEMES } from '../core/theme.service';
 @Component({
   selector: 'app-utility-page',
   standalone: true,
@@ -23,6 +24,23 @@ export class UtilityPage implements OnDestroy {
   auth = inject(AuthService);
   router = inject(Router);
   profileFlats = signal<string[]>([]);
+  themes = THEMES;
+  selectedTheme = 'FOREST';
+  recoveryRemaining = signal<number | null>(null);
+  recoveryCodes = signal<string[]>([]);
+  recoveryPassword = '';
+  loginValues: Record<string, any> = {};
+  loginFields: Field[] = [
+    { key: 'email', label: 'Login email', type: 'email', max: 254 },
+    { key: 'mobile', label: 'Login mobile number', max: 20 },
+    {
+      key: 'currentPassword',
+      label: 'Confirm current password',
+      type: 'password',
+      required: true,
+      max: 72,
+    },
+  ];
   key = '';
   title = '';
   description = '';
@@ -57,6 +75,8 @@ export class UtilityPage implements OnDestroy {
     void this.load();
   });
   ngOnDestroy() {
+    this.recoveryCodes.set([]);
+    this.recoveryPassword = '';
     this.sub.unsubscribe();
     this.revision++;
   }
@@ -81,6 +101,7 @@ export class UtilityPage implements OnDestroy {
         ];
       } else if (this.key === 'settings') {
         this.values = await this.api.get('/society');
+        this.selectedTheme = this.values['theme'] || 'FOREST';
         this.fields = [
           { key: 'name', label: 'Society name', required: true, max: 160 },
           { key: 'address', label: 'Address', type: 'textarea', max: 500 },
@@ -89,6 +110,12 @@ export class UtilityPage implements OnDestroy {
           { key: 'timezone', label: 'Timezone', required: true, max: 80 },
         ];
       } else if (this.key === 'profile') {
+        this.loginValues = {
+          email: this.session.user()?.email,
+          mobile: this.session.user()?.mobile,
+        };
+        const recovery = await this.api.get('/auth/recovery-codes');
+        this.recoveryRemaining.set(recovery.remaining);
         this.values = { name: this.session.user()?.name };
         this.fields = [{ key: 'name', label: 'Your name', required: true, max: 120 }];
         this.profileFlats.set([]);
@@ -154,11 +181,26 @@ export class UtilityPage implements OnDestroy {
       max: 72,
     },
     { key: 'newPassword', label: 'New password', type: 'password', required: true, max: 72 },
+    {
+      key: 'confirmPassword',
+      label: 'Confirm new password',
+      type: 'password',
+      required: true,
+      max: 72,
+    },
   ];
   async changePassword(body: Record<string, any>) {
+    this.error.set('');
+    if (body['newPassword'] !== body['confirmPassword']) {
+      this.error.set('The new passwords do not match.');
+      return;
+    }
     this.busy.set(true);
     try {
-      await this.api.send('POST', '/auth/change-password', body);
+      await this.api.send('POST', '/auth/change-password', {
+        currentPassword: body['currentPassword'],
+        newPassword: body['newPassword'],
+      });
       this.auth.logout();
       await this.router.navigate(['/login'], { queryParams: { passwordChanged: '1' } });
     } catch (e) {
@@ -170,6 +212,58 @@ export class UtilityPage implements OnDestroy {
   async refreshConfig() {
     await this.config.load();
     await this.load();
+  }
+  async saveTheme() {
+    this.busy.set(true);
+    this.error.set('');
+    this.success.set('');
+    try {
+      const society = await this.api.send('PATCH', '/society/theme', { theme: this.selectedTheme });
+      const context = this.session.context();
+      if (context) this.session.context.set({ ...context, society });
+      this.success.set(
+        'Society theme saved. Members see it when they next open or switch to this society.',
+      );
+    } catch (error) {
+      this.error.set(errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  async changeLogin(body: Record<string, any>) {
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      await this.api.send('PUT', '/auth/login-details', body);
+      this.auth.logout();
+      await this.router.navigate(['/login'], { queryParams: { loginChanged: '1' } });
+    } catch (error) {
+      this.error.set(errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  async generateRecoveryCodes() {
+    if (!this.recoveryPassword || this.busy()) return;
+    this.busy.set(true);
+    this.error.set('');
+    this.recoveryCodes.set([]);
+    try {
+      const result = await this.api.send('POST', '/auth/recovery-codes', {
+        currentPassword: this.recoveryPassword,
+      });
+      this.recoveryCodes.set(result.codes);
+      this.recoveryRemaining.set(result.remaining);
+    } catch (error) {
+      this.error.set(errorMessage(error));
+    } finally {
+      this.recoveryPassword = '';
+      this.busy.set(false);
+    }
+  }
+  downloadRecoveryCodes() {
+    const text = `My Society private recovery codes\nLogin: ${this.session.user()?.email || this.session.user()?.mobile}\nEach code works once. Keep these in your password manager or offline.\n\n${this.recoveryCodes().join('\n')}\n`;
+    downloadBlob(new Blob([text], { type: 'text/plain' }), 'my-society-private-recovery-codes.txt');
   }
   async search() {
     if (this.query.trim().length < 2) return;
