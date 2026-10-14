@@ -1,5 +1,11 @@
 # Verification
 
+## Session-persistence update — 14 October 2026
+
+Maven verify passes **26 backend integration/security tests**; Angular passes **26 unit tests** and the production build (approximately 393 kB initial / 103 kB transfer). The application browser suite now contains **21 tests**, including actual Chromium close/relaunch, managed-society restoration, resident/multiple-society reopen, temporary outage versus real 401, and offline logout. The production PWA test passes and npm audit reports zero vulnerabilities. See [session design](SESSION_PERSISTENCE.md). Live Pages checks and the actual deployment outcome are reported in the final handover, not inferred from local tests.
+
+## Previous release baseline
+
 Verified locally on 11 October 2026 against PostgreSQL 17.6 and Java 21.
 
 | Check | Result |

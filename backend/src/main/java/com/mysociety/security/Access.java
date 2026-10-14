@@ -33,8 +33,31 @@ public class Access {
         throw new ApiException(
             org.springframework.http.HttpStatus.UNAUTHORIZED,
             "Your session has expired. Please sign in.");
+      String sid = jwt.getToken().getClaimAsString("sid");
+      if (sid == null)
+        throw new ApiException(
+            org.springframework.http.HttpStatus.UNAUTHORIZED, "Please sign in again.");
+      if (sid != null) {
+        var matches =
+            db.query(
+                com.mysociety.auth.LoginSession.class,
+                "id=:id",
+                Map.of("id", UUID.fromString(sid)));
+        if (matches.isEmpty())
+          throw new ApiException(
+              org.springframework.http.HttpStatus.UNAUTHORIZED, "Please sign in again.");
+        var session = matches.getFirst();
+        if (session.revoked
+            || !session.userId.equals(a.id)
+            || !session.expiresAt.isAfter(java.time.Instant.now())
+            || !session.idleExpiresAt.isAfter(java.time.Instant.now()))
+          throw new ApiException(
+              org.springframework.http.HttpStatus.UNAUTHORIZED, "Please sign in again.");
+      }
     }
-    if (!"ACTIVE".equals(a.status)) throw ApiException.forbidden();
+    if (!"ACTIVE".equals(a.status))
+      throw new ApiException(
+          org.springframework.http.HttpStatus.UNAUTHORIZED, "Please sign in again.");
     return a;
   }
 

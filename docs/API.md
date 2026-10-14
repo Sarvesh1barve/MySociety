@@ -71,7 +71,11 @@ Administrators with `MEMBERSHIP_MANAGE` use `GET /membership-requests` and `POST
 
 `PUT /platform/users/{id}` edits a non-owner account's name/email/mobile. `PATCH /platform/users/{id}` changes its status. Both revoke old sessions. Owners use their own authenticated profile/account-security endpoints.
 
-## Error response
+## Persistent sessions
+
+Login now returns a ten-minute access JWT and sets the Secure/HttpOnly/partitioned session cookie. `POST /auth/refresh` renews the access JWT using that cookie; `POST /auth/logout` revokes the cookie session and its access tokens. These two endpoints require an allowed `Origin` and `X-MS-Session: 1`; the browser must send credentials. The persistent credential is never returned in JSON. See [session design and limitations](SESSION_PERSISTENCE.md).
+
+## Error body
 
 ```json
 {

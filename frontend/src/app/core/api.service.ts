@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { firstValueFrom, catchError, throwError, timeout, tap } from 'rxjs';
+import { firstValueFrom, catchError, throwError, timeout, tap, from, switchMap } from 'rxjs';
+import { SessionTransport } from './session-transport.service';
 import { AppConfigService } from './app-config.service';
 import { SessionService } from './session.service';
 @Injectable({ providedIn: 'root' })
@@ -30,7 +31,8 @@ export class ApiService {
 export const apiInterceptor: HttpInterceptorFn = (request, next) => {
   const config = inject(AppConfigService),
     session = inject(SessionService),
-    router = inject(Router);
+    router = inject(Router),
+    transport = inject(SessionTransport);
   if (!config.apiBaseUrl || !request.url.startsWith(config.apiBaseUrl + '/api/v1/'))
     return next(request);
   const publicRequest = [
@@ -40,25 +42,44 @@ export const apiInterceptor: HttpInterceptorFn = (request, next) => {
     '/system/health',
     '/application/config',
   ].some((p) => request.url === config.apiBaseUrl + '/api/v1' + p);
-  let headers = request.headers;
-  if (!publicRequest && session.token())
-    headers = headers.set('Authorization', 'Bearer ' + session.token());
-  if (!publicRequest && session.context() && !headers.has('X-Society-Id'))
-    headers = headers.set('X-Society-Id', session.context()!.society.id);
-  if (config.ngrokSkipBrowserWarning) headers = headers.set('ngrok-skip-browser-warning', 'true');
-  return next(request.clone({ headers })).pipe(
-    timeout(15000),
-    tap(() => session.reachable.set(true)),
-    catchError((error) => {
-      if (error.status === 0 || error.name === 'TimeoutError' || error.status >= 502)
-        session.reachable.set(false);
-      if (error.status === 401 && !publicRequest) {
-        session.clear();
-        void router.navigateByUrl('/login');
-      }
-      return throwError(() => error);
-    }),
-  );
+  const send = () => {
+    const sentToken = session.token();
+    let headers = request.headers;
+    if (!publicRequest && session.token())
+      headers = headers.set('Authorization', 'Bearer ' + session.token());
+    if (!publicRequest && session.context() && !headers.has('X-Society-Id'))
+      headers = headers.set('X-Society-Id', session.context()!.society.id);
+    if (config.ngrokSkipBrowserWarning) headers = headers.set('ngrok-skip-browser-warning', 'true');
+    return next(
+      request.clone({ headers, withCredentials: request.url.endsWith('/auth/login') }),
+    ).pipe(
+      timeout(15000),
+      tap(() => session.reachable.set(true)),
+      catchError((error) => {
+        if (error.status === 0 || error.name === 'TimeoutError' || error.status >= 502)
+          session.reachable.set(false);
+        if (error.status === 401 && !publicRequest && session.token() === sentToken) {
+          session.clear();
+          void router.navigateByUrl('/login');
+        }
+        return throwError(() => error);
+      }),
+    );
+  };
+  if (
+    !publicRequest &&
+    session.persistent() &&
+    (!session.token() || session.expiresAt() < Date.now() + 30000)
+  ) {
+    return from(transport.refresh()).pipe(
+      switchMap(() => send()),
+      catchError((error) => {
+        if (error.status === 401) void router.navigateByUrl('/login');
+        return throwError(() => error);
+      }),
+    );
+  }
+  return send();
 };
 export function errorMessage(error: unknown): string {
   if (error instanceof HttpErrorResponse) {

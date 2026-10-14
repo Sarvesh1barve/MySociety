@@ -58,9 +58,11 @@ public class SecurityConfig {
             "Accept",
             "X-Society-Id",
             "X-Correlation-Id",
+            "X-MS-Session",
             "ngrok-skip-browser-warning"));
     c.setExposedHeaders(List.of("Content-Disposition", "X-Correlation-Id"));
     c.setMaxAge(3600L);
+    c.setAllowCredentials(true);
     UrlBasedCorsConfigurationSource s = new UrlBasedCorsConfigurationSource();
     s.registerCorsConfiguration("/**", c);
     return s;
@@ -77,6 +79,8 @@ public class SecurityConfig {
             a -> {
               a.requestMatchers(
                       "/api/v1/auth/login",
+                      "/api/v1/auth/refresh",
+                      "/api/v1/auth/logout",
                       "/api/v1/auth/signup",
                       "/api/v1/auth/forgot-password",
                       "/api/v1/system/health",

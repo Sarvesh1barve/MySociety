@@ -1,4 +1,4 @@
-param([string]$Specs = 'app.spec.ts account-settings.spec.ts signup.spec.ts')
+param([string]$Specs = 'app.spec.ts account-settings.spec.ts signup.spec.ts session-persistence.spec.ts')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $projectRoot

@@ -7,10 +7,8 @@ import com.mysociety.society.Society;
 import com.mysociety.user.Account;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
-import java.time.Instant;
 import java.util.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +24,7 @@ public class AuthController {
   private final String dummy;
   private final com.mysociety.user.AccountRepository accounts;
   private final LoginThrottle throttle;
+  private final SessionTokens sessions;
 
   public AuthController(
       Store db,
@@ -33,13 +32,15 @@ public class AuthController {
       PasswordEncoder passwords,
       JwtEncoder encoder,
       com.mysociety.user.AccountRepository accounts,
-      LoginThrottle throttle) {
+      LoginThrottle throttle,
+      SessionTokens sessions) {
     this.db = db;
     this.access = access;
     this.passwords = passwords;
     this.encoder = encoder;
     this.accounts = accounts;
     this.throttle = throttle;
+    this.sessions = sessions;
     dummy = passwords.encode(UUID.randomUUID().toString());
   }
 
@@ -47,7 +48,8 @@ public class AuthController {
       @NotBlank @Size(max = 254) String login, @NotBlank @Size(max = 72) String password) {}
 
   @PostMapping("/auth/login")
-  public Map<String, Object> login(@Valid @RequestBody Login body) {
+  public Map<String, Object> login(
+      @Valid @RequestBody Login body, jakarta.servlet.http.HttpServletResponse response) {
     String identifier = Input.login(body.login());
     throttle.check(identifier);
     Account a = accounts.findByLogin(identifier).orElse(null);
@@ -60,25 +62,7 @@ public class AuthController {
           org.springframework.http.HttpStatus.UNAUTHORIZED, "Incorrect email/mobile or password.");
     }
     throttle.success(identifier);
-    Instant now = Instant.now();
-    var claims =
-        JwtClaimsSet.builder()
-            .issuer("my-society-api")
-            .subject(a.id.toString())
-            .claim("revision", a.tokenVersion)
-            .issuedAt(now)
-            .expiresAt(now.plusSeconds(3600))
-            .id(UUID.randomUUID().toString())
-            .build();
-    return Map.of(
-        "token",
-        encoder
-            .encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
-            .getTokenValue(),
-        "expiresAt",
-        now.plusSeconds(3600),
-        "user",
-        Views.of(a));
+    return sessions.create(a, response);
   }
 
   @GetMapping("/auth/me")

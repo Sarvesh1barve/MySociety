@@ -101,6 +101,17 @@ export class Login {
   session = inject(SessionService);
   router = inject(Router);
   private route = inject(ActivatedRoute);
+  constructor() {
+    if (this.session.restorePending()) void this.router.navigateByUrl('/reconnect');
+    else if (this.session.user())
+      void this.router.navigateByUrl(
+        this.session.context()
+          ? '/dashboard'
+          : this.session.user()?.superAdmin
+            ? '/platform'
+            : '/select-society',
+      );
+  }
   notice = this.route.snapshot.queryParamMap.has('loginChanged')
     ? 'Login details updated. Use your new email or mobile number.'
     : this.route.snapshot.queryParamMap.has('passwordChanged')
@@ -121,11 +132,13 @@ export class Login {
       const { login, password } = this.form.getRawValue();
       await this.auth.login(login, password);
       await this.router.navigateByUrl(
-        this.session.user()?.superAdmin && !this.session.context()
-          ? '/platform'
-          : this.session.context()
-            ? '/dashboard'
-            : '/select-society',
+        this.session.restorePending()
+          ? '/reconnect'
+          : this.session.user()?.superAdmin && !this.session.context()
+            ? '/platform'
+            : this.session.context()
+              ? '/dashboard'
+              : '/select-society',
       );
     } catch (e) {
       this.error.set(errorMessage(e));

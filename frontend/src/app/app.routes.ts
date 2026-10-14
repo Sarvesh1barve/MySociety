@@ -3,6 +3,10 @@ import { authGuard, platformGuard, societyGuard, permissionGuard } from './core/
 import { MODULES } from './features/module-definitions';
 const utility = () => import('./features/utility-page').then((m) => m.UtilityPage);
 export const routes: Routes = [
+  {
+    path: 'reconnect',
+    loadComponent: () => import('./features/reconnect').then((m) => m.Reconnect),
+  },
   { path: 'signup', loadComponent: () => import('./features/signup').then((m) => m.Signup) },
   {
     path: 'membership-requests',

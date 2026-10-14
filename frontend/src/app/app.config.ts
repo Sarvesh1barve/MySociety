@@ -35,8 +35,8 @@ export const appConfig: ApplicationConfig = {
         try {
           config.setBrand(await api.get('/application/config'));
         } catch {}
-        await auth.restore();
       }
+      await auth.restore();
     }),
   ],
 };

@@ -12,6 +12,8 @@ The website is static hosting; sign-in requires this laptop's PostgreSQL, Spring
 
 ## 2. Secure your owner account first
 
+Sign-in now persists across refresh and reopening on compatible browsers: up to 30 days, with a seven-day inactivity limit. The secure session cookie is not readable by JavaScript. Temporary server outages show a reconnect screen without discarding sign-in. After this session upgrade, sign in once again; a changed ngrok hostname also requires a fresh sign-in. See [session policy](SESSION_PERSISTENCE.md). Always sign out on shared devices.
+
 1. Sign in as the owner. Open **Your profile** using your avatar in the top-right corner (or `#/profile`).
 2. Under your profile details, change **Your name** and Save.
 3. Under **Change login email or mobile**, replace the initial email with your preferred email and optionally add your mobile number. At least one must remain. Confirm your **current password** and choose **Update login details**.
@@ -96,7 +98,7 @@ This workstation uses a project-specific loopback-only PostgreSQL instance on **
 cd D:\MySociety
 & .\.tools\postgres\pgsql\bin\pg_ctl.exe status -D D:\MySociety\.local\postgres-data
 # Only if this project instance is stopped:
-& .\.tools\postgres\pgsql\bin\pg_ctl.exe start -D D:\MySociety\.local\postgres-data -l D:\MySociety\.local\postgres.log
+& .\.tools\postgres\pgsql\bin\pg_ctl.exe start -D D:\MySociety\.local\postgres-data -o '-p 5433 -h 127.0.0.1' -l D:\MySociety\.local\postgres.log
 ```
 
 ### Backend

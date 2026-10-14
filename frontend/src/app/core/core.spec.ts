@@ -82,6 +82,7 @@ describe('Authentication, permissions and society context', () => {
   let auth: AuthService;
   beforeEach(() => {
     sessionStorage.clear();
+    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -98,6 +99,7 @@ describe('Authentication, permissions and society context', () => {
   afterEach(() => {
     http.verify();
     sessionStorage.clear();
+    localStorage.clear();
   });
   it('applies authentication and active society to API calls centrally', async () => {
     session.setToken('unit-test-token');
@@ -145,6 +147,7 @@ describe('Authentication, permissions and society context', () => {
   });
   it('stores authentication only after successful login', async () => {
     const pending = auth.login('resident@example.org', 'not-a-real-password');
+    await Promise.resolve();
     http.expectOne('http://localhost:8081/api/v1/auth/login').flush({
       token: 'test-access-token',
       user: { id: 'u', name: 'Resident', superAdmin: false },
@@ -176,16 +179,14 @@ describe('Authentication, permissions and society context', () => {
   });
   it('one approved society opens automatically, but a disabled society does not', async () => {
     let pending = auth.loadMemberships();
-    http
-      .expectOne('http://localhost:8081/api/v1/memberships')
-      .flush([
-        {
-          id: 'member-a',
-          societyId: 'society-a',
-          roles: 'RESIDENT_OWNER',
-          society: context.society,
-        },
-      ]);
+    http.expectOne('http://localhost:8081/api/v1/memberships').flush([
+      {
+        id: 'member-a',
+        societyId: 'society-a',
+        roles: 'RESIDENT_OWNER',
+        society: context.society,
+      },
+    ]);
     await Promise.resolve();
     http
       .expectOne('http://localhost:8081/api/v1/memberships/member-a/activate-context')
@@ -193,21 +194,20 @@ describe('Authentication, permissions and society context', () => {
     await pending;
     expect(session.context()?.society.id).toBe('society-a');
     pending = auth.loadMemberships();
-    http
-      .expectOne('http://localhost:8081/api/v1/memberships')
-      .flush([
-        {
-          id: 'member-a',
-          societyId: 'society-a',
-          roles: 'RESIDENT_OWNER',
-          society: { ...context.society, status: 'SUSPENDED' },
-        },
-      ]);
+    http.expectOne('http://localhost:8081/api/v1/memberships').flush([
+      {
+        id: 'member-a',
+        societyId: 'society-a',
+        roles: 'RESIDENT_OWNER',
+        society: { ...context.society, status: 'SUSPENDED' },
+      },
+    ]);
     await pending;
     expect(session.context()).toBeNull();
   });
   it('does not create an authenticated session for an invalid login', async () => {
     const pending = auth.login('resident@example.org', 'wrong').catch(() => undefined);
+    await Promise.resolve();
     http
       .expectOne('http://localhost:8081/api/v1/auth/login')
       .flush({ message: 'Incorrect credentials' }, { status: 401, statusText: 'Unauthorized' });
@@ -259,6 +259,7 @@ describe('Authentication, permissions and society context', () => {
     expect(session.context()?.society.id).toBe('society-a');
     expect(sessionStorage.getItem('ms.managedSociety')).toBe('society-a');
     auth.logout();
+    http.expectOne('http://localhost:8081/api/v1/auth/logout').flush({});
     expect(sessionStorage.getItem('ms.managedSociety')).toBeNull();
   });
   it('permission guard uses active society permissions', () => {
@@ -285,6 +286,7 @@ describe('Authentication, permissions and society context', () => {
     session.context.set(context);
     const generation = session.generation();
     auth.logout();
+    http.expectOne('http://localhost:8081/api/v1/auth/logout').flush({});
     expect(session.token()).toBe('');
     expect(session.context()).toBeNull();
     expect(sessionStorage.getItem('ms.token')).toBeNull();

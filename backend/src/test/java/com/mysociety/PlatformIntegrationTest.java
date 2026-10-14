@@ -26,11 +26,162 @@ import org.springframework.test.web.servlet.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PlatformIntegrationTest {
   @Autowired MockMvc mvc;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+  private org.springframework.mock.web.MockHttpServletResponse sessionLogin(
+      String email, String password) throws Exception {
+    return mvc.perform(
+            post("/api/v1/auth/login")
+                .with(
+                    r -> {
+                      r.setRemoteAddr(clientAddress);
+                      return r;
+                    })
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("login", email, "password", password))))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse();
+  }
+
+  private jakarta.servlet.http.Cookie sessionCookie(
+      org.springframework.mock.web.MockHttpServletResponse response) {
+    String header = response.getHeader("Set-Cookie");
+    assertNotNull(header);
+    assertTrue(header.contains("HttpOnly"));
+    assertTrue(header.contains("Secure"));
+    assertTrue(header.contains("SameSite=None"));
+    assertTrue(header.contains("Partitioned"));
+    return new jakarta.servlet.http.Cookie(
+        com.mysociety.auth.SessionTokens.COOKIE,
+        header.substring(header.indexOf('=') + 1, header.indexOf(';')));
+  }
+
+  private org.springframework.mock.web.MockHttpServletResponse sessionRequest(
+      String action, jakarta.servlet.http.Cookie cookie, int expected) throws Exception {
+    return mvc.perform(
+            post("/api/v1/auth/" + action)
+                .cookie(cookie)
+                .with(
+                    r -> {
+                      r.setRemoteAddr(clientAddress);
+                      return r;
+                    })
+                .header("Origin", "http://localhost:4200")
+                .header("X-MS-Session", "1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().is(expected))
+        .andReturn()
+        .getResponse();
+  }
+
+  @Test
+  @Order(23)
+  void persistentCookieRotationRetryReplayAndLogout() throws Exception {
+    var login = sessionLogin("owner-new@test.local", PASSWORD);
+    var initial = sessionCookie(login);
+    String token = json.readTree(login.getContentAsString()).get("token").asText();
+    assertTrue(
+        Instant.parse(json.readTree(login.getContentAsString()).get("expiresAt").asText())
+            .isBefore(Instant.now().plusSeconds(601)));
+    var first = sessionRequest("refresh", initial, 200);
+    var rotated = sessionCookie(first);
+    assertNotEquals(initial.getValue(), rotated.getValue());
+    // Lost response/parallel tab retry yields the same successor within the short grace window.
+    assertEquals(
+        rotated.getValue(), sessionCookie(sessionRequest("refresh", initial, 200)).getValue());
+    UUID sid = UUID.fromString(initial.getValue().split("\\.")[0]);
+    jdbc.update("update login_sessions set rotated_at=now()-interval '90 seconds' where id=?", sid);
+    sessionRequest("refresh", initial, 401);
+    sessionRequest("refresh", rotated, 401);
+    request(auth(get("/api/v1/auth/me"), token, null), 401);
+
+    var fresh = sessionLogin("owner-new@test.local", PASSWORD);
+    var cookie = sessionCookie(fresh);
+    var access = json.readTree(fresh.getContentAsString()).get("token").asText();
+    sessionRequest("logout", cookie, 200);
+    sessionRequest("refresh", cookie, 401);
+    request(auth(get("/api/v1/auth/me"), access, null), 401);
+  }
+
+  @Test
+  @Order(24)
+  void sessionExpiryAndCsrfProtection() throws Exception {
+    var cookie = sessionCookie(sessionLogin("owner-new@test.local", PASSWORD));
+    mvc.perform(post("/api/v1/auth/refresh").cookie(cookie)).andExpect(status().isForbidden());
+    mvc.perform(
+            post("/api/v1/auth/logout")
+                .cookie(cookie)
+                .header("Origin", "https://evil.example")
+                .header("X-MS-Session", "1"))
+        .andExpect(status().isForbidden());
+    UUID sid = UUID.fromString(cookie.getValue().split("\\.")[0]);
+    jdbc.update(
+        "update login_sessions set idle_expires_at=now()-interval '1 second' where id=?", sid);
+    sessionRequest("refresh", cookie, 401);
+    cookie = sessionCookie(sessionLogin("owner-new@test.local", PASSWORD));
+    sid = UUID.fromString(cookie.getValue().split("\\.")[0]);
+    jdbc.update("update login_sessions set expires_at=now()-interval '1 second' where id=?", sid);
+    sessionRequest("refresh", cookie, 401);
+  }
+
+  @Test
+  @Order(25)
+  void accountChangesRevokePersistentSessionsAndAccessTokens() throws Exception {
+    for (String operation : List.of("password", "identity", "admin-reset", "suspend")) {
+      String email = "session-" + operation + "@test.local";
+      var user =
+          postJson(
+              "/platform/users",
+              owner,
+              null,
+              Map.of("name", "Session test", "email", email, "password", PASSWORD),
+              200);
+      var login = sessionLogin(email, PASSWORD);
+      var cookie = sessionCookie(login);
+      String token = json.readTree(login.getContentAsString()).get("token").asText();
+      switch (operation) {
+        case "password" ->
+            postJson(
+                "/auth/change-password",
+                token,
+                null,
+                Map.of("currentPassword", PASSWORD, "newPassword", "Changed-" + UUID.randomUUID()),
+                200);
+        case "identity" ->
+            request(
+                auth(put("/api/v1/auth/login-details"), token, null)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        json.writeValueAsString(
+                            Map.of("email", "changed-" + email, "currentPassword", PASSWORD))),
+                200);
+        case "admin-reset" ->
+            postJson(
+                "/auth/admin-reset/" + user.get("id").asText(),
+                owner,
+                null,
+                Map.of("currentPassword", PASSWORD, "newPassword", "Reset-" + UUID.randomUUID()),
+                200);
+        case "suspend" ->
+            request(
+                auth(patch("/api/v1/platform/users/" + user.get("id").asText()), owner, null)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"status\":\"SUSPENDED\"}"),
+                200);
+      }
+      sessionRequest("refresh", cookie, 401);
+      request(auth(get("/api/v1/auth/me"), token, null), 401);
+    }
+  }
+
   @Test
   @Order(99)
   void missingRoutesReturnFriendlyNotFound() throws Exception {
     request(get("/api/v1/not-a-real-route").header("Authorization", "Bearer " + owner), 404);
   }
+
   @Autowired ObjectMapper json;
   @Autowired org.springframework.security.oauth2.jwt.JwtEncoder jwtEncoder;
   static int clientNumber = 1;
